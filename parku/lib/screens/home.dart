@@ -7,10 +7,15 @@ class HomeScreen extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onNavTap;
 
+  final bool hasActiveParking;
+  final VoidCallback onOpenMyParking;
+
   const HomeScreen({
     super.key,
     required this.currentIndex,
     required this.onNavTap,
+    required this.hasActiveParking,
+    required this.onOpenMyParking,
   });
 
   @override
@@ -20,7 +25,7 @@ class HomeScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // HEADER
+            // ENCABEZADO
             const Padding(
               padding: EdgeInsets.fromLTRB(32, 22, 32, 22),
               child: Align(
@@ -36,7 +41,7 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
 
-            // MAP
+            // MAPA
             Expanded(
               child: Stack(
                 children: [
@@ -47,15 +52,14 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
 
-                  // LOCATION BOX
+                  // CAJA DE UBICACIÓN
                   Positioned(
                     top: 20,
                     left: 30,
                     right: 30,
                     child: Container(
                       height: 72,
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 20),
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(4),
@@ -83,7 +87,7 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
 
-                  // PARKING MARKERS
+                  // MARCADORES
                   const Positioned(
                     top: 160,
                     left: 210,
@@ -102,81 +106,117 @@ class HomeScreen extends StatelessWidget {
                     child: ParkingMarker(),
                   ),
 
-                  // MY PARKING CARD
+                  // TARJETA MY PARKING
                   Positioned(
                     left: 30,
                     right: 30,
                     bottom: 20,
                     child: Container(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(28),
                       ),
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 13,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.lightPurple,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: const Text(
-                              'MY PARKING',
-                              style: TextStyle(
-                                color: AppColors.primary,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
+                          // ETIQUETA
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Container(
+                              width: 170,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.lightPurple,
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: const Text(
+                                'MY PARKING',
+                                style: TextStyle(
+                                  color: AppColors.primary,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ),
 
+                          const SizedBox(height: 14),
+
+                          // CONTENIDO SIN PARQUEO
+                          if (!hasActiveParking) ...[
+                            const Text(
+                              'No active parking',
+                              style: TextStyle(
+                                fontSize: 21,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.darkText,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Your current parking will appear here.',
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: AppColors.greyText,
+                              ),
+                            ),
+                          ]
+
+                          // CONTENIDO CON PARQUEO
+                          else ...[
+                            const Text(
+                              'City U Parking',
+                              style: TextStyle(
+                                fontSize: 21,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.darkText,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Car ABC123 · Pick up at 4:00 PM',
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: AppColors.greyText,
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            const Text(
+                              'Calle 20 · Las Aguas, Bogotá',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: AppColors.greyText,
+                              ),
+                            ),
+                          ],
+
                           const SizedBox(height: 16),
 
-                          const Text(
-                            'No active parking',
-                            style: TextStyle(
-                              fontSize: 25,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.darkText,
-                            ),
-                          ),
-
-                          const SizedBox(height: 10),
-
-                          const Text(
-                            'Your current parking will appear here.',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: AppColors.greyText,
-                            ),
-                          ),
-
-                          const SizedBox(height: 18),
-
+                          // BOTÓN
                           SizedBox(
                             width: double.infinity,
-                            height: 58,
+                            height: 52,
                             child: ElevatedButton(
-                              onPressed: () {},
+                              onPressed: onOpenMyParking,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
                                 foregroundColor: Colors.white,
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius.circular(14),
+                                  borderRadius: BorderRadius.circular(14),
                                 ),
                               ),
-                              child: const Text(
-                                'My parking',
-                                style: TextStyle(
-                                  fontSize: 18,
+                              child: Text(
+                                hasActiveParking
+                                    ? 'View my parking'
+                                    : 'My parking',
+                                style: const TextStyle(
+                                  fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -192,10 +232,11 @@ class HomeScreen extends StatelessWidget {
 
             const SizedBox(height: 15),
 
-           BottomNavBar(
-            currentIndex: currentIndex,
-            onTap: onNavTap,
-          ),
+            // BARRA DE NAVEGACIÓN
+            NavBar(
+              currentIndex: currentIndex,
+              onTap: onNavTap,
+            ),
           ],
         ),
       ),
