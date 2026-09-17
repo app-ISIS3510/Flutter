@@ -7,12 +7,20 @@ class MyParkingScreen extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onNavTap;
   final VoidCallback onEndParking;
+  final VoidCallback? onChangePickupTime;
+  final String pickupTime;
+  final String parkingName;
+  final String parkingAddress;
 
   const MyParkingScreen({
     super.key,
     required this.currentIndex,
     required this.onNavTap,
     required this.onEndParking,
+    this.onChangePickupTime,
+    this.pickupTime = '4:00',
+    this.parkingName = 'City U Parking',
+    this.parkingAddress = 'Calle 20 · Las Aguas, Bogotá',
   });
 
   @override
@@ -110,7 +118,7 @@ class MyParkingScreen extends StatelessWidget {
                     const SizedBox(height: 16),
 
                     // PICKUP TIME
-                    const Center(
+                    Center(
                       child: Text.rich(
                         TextSpan(
                           children: [
@@ -122,7 +130,7 @@ class MyParkingScreen extends StatelessWidget {
                               ),
                             ),
                             TextSpan(
-                              text: '4:00 PM',
+                              text: '$pickupTime PM',
                               style: TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w700,
@@ -147,8 +155,8 @@ class MyParkingScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'City U Parking',
+                          Text(
+                            parkingName,
                             style: TextStyle(
                               fontSize: 23,
                               fontWeight: FontWeight.w700,
@@ -181,8 +189,8 @@ class MyParkingScreen extends StatelessWidget {
 
                           const SizedBox(height: 8),
 
-                          const Text(
-                            'Calle 20 · Las Aguas, Bogotá',
+                          Text(
+                            parkingAddress,
                             style: TextStyle(
                               fontSize: 15,
                               color: AppColors.greyText,
@@ -222,7 +230,7 @@ class MyParkingScreen extends StatelessWidget {
                       width: double.infinity,
                       height: 58,
                       child: ElevatedButton(
-                        onPressed: () {},
+                        onPressed: onChangePickupTime,
                         style: ElevatedButton.styleFrom(
                           elevation: 0,
                           backgroundColor: AppColors.lightPurple,

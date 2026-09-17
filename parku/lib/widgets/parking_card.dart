@@ -5,20 +5,20 @@ class ParkingCard extends StatelessWidget {
   final String name;
   final String address;
   final String type;
+  final VoidCallback? onTap;
 
   const ParkingCard({
     super.key,
     required this.name,
     required this.address,
     required this.type,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: () {
-        // Después podemos navegar a ParkingDetails
-      },
+      onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Container(
         padding: const EdgeInsets.all(18),

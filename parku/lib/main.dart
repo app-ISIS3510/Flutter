@@ -18,7 +18,7 @@ class ParkUApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: AppColors.background,
-        fontFamily: 'Arial',
+        fontFamily: 'Inter',
       ),
       home: const MainNavigationScreen(),
     );

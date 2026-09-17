@@ -7,11 +7,13 @@ import '../widgets/parking_card.dart';
 class ParkingListScreen extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onNavTap;
+  final ValueChanged<Map<String, String>>? onSelectParking;
 
   const ParkingListScreen({
     super.key,
     required this.currentIndex,
     required this.onNavTap,
+    this.onSelectParking,
   });
 
   @override
@@ -130,6 +132,7 @@ class ParkingListScreen extends StatelessWidget {
                     name: parking['name']!,
                     address: parking['address']!,
                     type: parking['type']!,
+                    onTap: onSelectParking == null ? null : () => onSelectParking!(parking),
                   );
                 },
               ),

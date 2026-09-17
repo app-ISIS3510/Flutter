@@ -1,102 +1,77 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_theme.dart';
+import 'design_icon.dart';
 
 class NavBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
 
-  const NavBar({
-    super.key,
-    required this.currentIndex,
-    required this.onTap,
-  });
+  const NavBar({super.key, required this.currentIndex, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
+    const icons = ['map', 'parking', 'heart', 'user'];
+    const labels = ['Map', 'Parking lots', 'Favorites', 'Profile'];
+
     return Container(
-      margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 8,
-      ),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         children: [
-          _navItem(
-            index: 0,
-            icon: Icons.map_outlined,
-            label: 'Map',
-            selected: currentIndex == 0,
-          ),
-          _navItem(
-            index: 1,
-            icon: Icons.local_parking_outlined,
-            label: 'Parking lots',
-            selected: currentIndex == 1,
-          ),
-          _navItem(
-            index: 2,
-            icon: Icons.favorite_border,
-            label: 'Favorites',
-            selected: currentIndex == 2,
-          ),
-          _navItem(
-            index: 3,
-            icon: Icons.person_outline,
-            label: 'Profile',
-            selected: currentIndex == 3,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _navItem({
-    required int index,
-    required IconData icon,
-    required String label,
-    required bool selected,
-  }) {
-    return Expanded(
-      child: InkWell(
-        onTap: () => onTap(index),
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.lightPurple
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                color: selected
-                    ? AppColors.primary
-                    : AppColors.greyText,
-                size: 25,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight:
-                      selected ? FontWeight.w600 : FontWeight.w500,
-                  color: selected
-                      ? AppColors.primary
-                      : AppColors.greyText,
+          for (int i = 0; i < labels.length; i++) ...[
+            if (i > 0) const SizedBox(width: 2),
+            Expanded(
+              child: Semantics(
+                button: true,
+                selected: currentIndex == i,
+                child: InkWell(
+                  onTap: () => onTap(i),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 56),
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: currentIndex == i
+                          ? AppColors.lightPurple
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        DesignIcon(
+                          icons[i],
+                          size: 22,
+                          color: currentIndex == i
+                              ? AppColors.primary
+                              : AppColors.greyText,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          labels[i],
+                          style: TextStyle(
+                            fontSize: 10,
+                            height: 1.35,
+                            fontWeight: FontWeight.w600,
+                            color: currentIndex == i
+                                ? AppColors.primary
+                                : AppColors.greyText,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ],
-          ),
-        ),
+            ),
+          ],
+        ],
       ),
     );
   }
