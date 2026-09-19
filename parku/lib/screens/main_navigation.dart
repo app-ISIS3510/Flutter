@@ -258,6 +258,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           onNavTap: changePage,
           hasActiveParking: hasActiveParking,
           onOpenMyParking: openMyParking,
+          onSelectParking: openParkingDetail,
         );
     }
   }
