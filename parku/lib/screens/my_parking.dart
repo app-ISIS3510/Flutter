@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
+import 'end_parking.dart';
 
 class MyParkingScreen extends StatelessWidget {
   final int currentIndex;
@@ -256,7 +257,18 @@ class MyParkingScreen extends StatelessWidget {
                       width: double.infinity,
                       height: 58,
                       child: ElevatedButton(
-                        onPressed: onEndParking,
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => EndParkingScreen(
+                                currentIndex: currentIndex,
+                                onNavTap: onNavTap,
+                                onConfirmEndParking: onEndParking,
+                              ),
+                            ),
+                          );
+                        },
                         style: ElevatedButton.styleFrom(
                           elevation: 0,
                           backgroundColor: AppColors.primary,
