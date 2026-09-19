@@ -103,15 +103,11 @@ class _ParkingDetailScreenState extends State<ParkingDetailScreen> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(20),
-                          child: Container(
+                          child: Image.asset(
+                            'assets/images/cityuimage.png',
                             width: double.infinity,
                             height: 150,
-                            color: AppColors.lightPurple,
-                            child: const Icon(
-                              Icons.local_parking,
-                              size: 80,
-                              color: AppColors.primary,
-                            ),
+                            fit: BoxFit.cover,
                           ),
                         ),
                         Positioned(
