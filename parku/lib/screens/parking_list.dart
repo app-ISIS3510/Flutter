@@ -8,12 +8,14 @@ class ParkingListScreen extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onNavTap;
   final ValueChanged<Map<String, String>>? onSelectParking;
+  final VoidCallback? onSearchTap;
 
   const ParkingListScreen({
     super.key,
     required this.currentIndex,
     required this.onNavTap,
-    this.onSelectParking,
+    this.onSelectParking, 
+    this.onSearchTap,
   });
 
   @override
@@ -66,9 +68,7 @@ class ParkingListScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: InkWell(
-                onTap: () {
-                  // Luego conectamos esto con SearchScreen
-                },
+              onTap: onSearchTap,
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
                   height: 58,
