@@ -10,12 +10,15 @@ class HomeScreen extends StatelessWidget {
   final bool hasActiveParking;
   final VoidCallback onOpenMyParking;
 
+  final ValueChanged<Map<String, String>> onSelectParking;
+
   const HomeScreen({
     super.key,
     required this.currentIndex,
     required this.onNavTap,
     required this.hasActiveParking,
     required this.onOpenMyParking,
+    required this.onSelectParking,
   });
 
   @override
@@ -88,22 +91,43 @@ class HomeScreen extends StatelessWidget {
                   ),
 
                   // MARCADORES
-                  const Positioned(
+                  Positioned(
                     top: 160,
                     left: 210,
-                    child: ParkingMarker(),
+                    child: ParkingMarker(
+                      onTap: () {
+                        onSelectParking({
+                          'name': 'City U Parking',
+                          'address': 'Calle 20 · Las Aguas, Bogotá',
+                        });
+                      },
+                    ),
                   ),
 
-                  const Positioned(
+                  Positioned(
                     top: 270,
                     right: 100,
-                    child: ParkingMarker(),
+                    child: ParkingMarker(
+                      onTap: () {
+                        onSelectParking({
+                          'name': 'MetroPark Center',
+                          'address': '45 Market St',
+                        });
+                      },
+                    ),
                   ),
 
-                  const Positioned(
+                  Positioned(
                     top: 310,
                     left: 120,
-                    child: ParkingMarker(),
+                    child: ParkingMarker(
+                      onTap: () {
+                        onSelectParking({
+                          'name': 'University Lot C',
+                          'address': '102 Campus Drive',
+                        });
+                      },
+                    ),
                   ),
 
                   // TARJETA MY PARKING
@@ -245,22 +269,31 @@ class HomeScreen extends StatelessWidget {
 }
 
 class ParkingMarker extends StatelessWidget {
-  const ParkingMarker({super.key});
+  final VoidCallback onTap;
+
+  const ParkingMarker({
+    super.key,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 62,
-      height: 62,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-      ),
-      child: const Center(
-        child: Icon(
-          Icons.location_on_outlined,
-          color: AppColors.primary,
-          size: 34,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(40),
+      child: Container(
+        width: 62,
+        height: 62,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+        ),
+        child: const Center(
+          child: Icon(
+            Icons.location_on_outlined,
+            color: AppColors.primary,
+            size: 34,
+          ),
         ),
       ),
     );
