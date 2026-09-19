@@ -34,7 +34,6 @@ class _SearchScreenState extends State<SearchScreen> {
   void initState() {
     super.initState();
 
-    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _searchFocusNode.requestFocus();
     });
@@ -64,16 +63,8 @@ class _SearchScreenState extends State<SearchScreen> {
       TextPosition(offset: parkingName.length),
     );
 
-    setState(() {});
-
     FocusScope.of(context).unfocus();
     widget.onSearch(parkingName);
-  }
-
-  void _clearSearch() {
-    _searchController.clear();
-    setState(() {});
-    _searchFocusNode.requestFocus();
   }
 
   @override
@@ -89,7 +80,6 @@ class _SearchScreenState extends State<SearchScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    
                     Row(
                       children: [
                         InkWell(
@@ -108,9 +98,7 @@ class _SearchScreenState extends State<SearchScreen> {
                             ),
                           ),
                         ),
-
                         const SizedBox(width: 14),
-
                         const Text(
                           'Search',
                           style: TextStyle(
@@ -121,10 +109,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 22),
-
-                    
                     const Text(
                       'Search by name',
                       style: TextStyle(
@@ -133,16 +118,12 @@ class _SearchScreenState extends State<SearchScreen> {
                         color: AppColors.darkText,
                       ),
                     ),
-
                     const SizedBox(height: 9),
-
-                    
                     TextField(
                       controller: _searchController,
                       focusNode: _searchFocusNode,
                       textInputAction: TextInputAction.search,
                       onSubmitted: (_) => _performSearch(),
-                      onChanged: (_) => setState(() {}),
                       decoration: InputDecoration(
                         filled: true,
                         fillColor: AppColors.white,
@@ -169,10 +150,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 14),
-
-                   
                     const Text(
                       'SUGGESTED PARKING LOTS',
                       style: TextStyle(
@@ -181,10 +159,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         color: AppColors.greyText,
                       ),
                     ),
-
                     const SizedBox(height: 12),
-
-                    
                     ...suggestedParkingLots.map(
                       (parkingName) => Padding(
                         padding: const EdgeInsets.only(bottom: 10),
@@ -193,7 +168,9 @@ class _SearchScreenState extends State<SearchScreen> {
                           borderRadius: BorderRadius.circular(14),
                           child: Container(
                             width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 14,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.white,
                               borderRadius: BorderRadius.circular(14),
@@ -211,76 +188,10 @@ class _SearchScreenState extends State<SearchScreen> {
                         ),
                       ),
                     ),
-
-                    const SizedBox(height: 20),
-
-                    
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: _clearSearch,
-                            style: OutlinedButton.styleFrom(
-                              backgroundColor: AppColors.white,
-                              foregroundColor: AppColors.primary,
-                              side: BorderSide.none,
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 16,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
-                            child: const Text(
-                              'Clear',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(width: 12),
-
-                        Expanded(
-                          flex: 2,
-                          child: ElevatedButton(
-                            onPressed: _searchController.text.trim().isEmpty
-                                ? null
-                                : _performSearch,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: AppColors.white,
-                              disabledBackgroundColor:
-                                  AppColors.lightPurple,
-                              disabledForegroundColor:
-                                  AppColors.greyText,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 16,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
-                            child: const Text(
-                              'Search',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
                   ],
                 ),
               ),
             ),
-
-            
             NavBar(
               currentIndex: widget.currentIndex,
               onTap: widget.onNavTap,
