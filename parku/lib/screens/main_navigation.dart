@@ -11,6 +11,8 @@ import '../services/session_service.dart';
 import '../controllers/favorite_controller.dart';
 import '../repositories/favorite_repository.dart';
 import '../services/favorite_service.dart';
+import '../controllers/navigation_controller.dart';
+import '../services/navigation_service.dart';
 import 'home.dart';
 import 'parking_list.dart';
 import 'my_parking.dart';
@@ -43,6 +45,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   late final FavoriteRepository favoriteRepository;
   late final FavoriteService favoriteService;
   late final FavoriteController favoriteController;
+  late final NavigationService navigationService;
+  late final NavigationController navigationController;
+
   int currentIndex = 0;
 
   bool hasActiveParking = true;
@@ -90,6 +95,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     favoriteRepository = FavoriteRepository(supabase);
     favoriteService = FavoriteService(favoriteRepository);
     favoriteController = FavoriteController(favoriteService);
+    navigationService = NavigationService.create();
+    navigationController = NavigationController(navigationService);
   }
 
   String _formatTimeForPicker(DateTime dateTime) {
@@ -175,6 +182,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 parking: parking,
                 currentIndex: 1,
                 isFavorite: isFavorite,
+                navigationController: navigationController,
 
                 onToggleFavorite: () async {
                   await favoriteController.toggleFavorite(
@@ -470,6 +478,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   onNavTap: changePage,
                   session: session,
                   parking: parking,
+                  navigationController: navigationController,
                   onEndParking: endParking,
                   onChangePickupTime: openChangePickupTime,
                 );

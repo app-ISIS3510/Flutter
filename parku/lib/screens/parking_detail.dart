@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
+import '../controllers/navigation_controller.dart';
 
 class ParkingDetailScreen extends StatefulWidget {
   final Map<String, String> parking;
@@ -10,6 +11,7 @@ class ParkingDetailScreen extends StatefulWidget {
   final VoidCallback onParkHere;
   final bool isFavorite;
   final VoidCallback onToggleFavorite;
+  final NavigationController navigationController;
 
   const ParkingDetailScreen({
     super.key,
@@ -19,6 +21,7 @@ class ParkingDetailScreen extends StatefulWidget {
     required this.onParkHere,
     required this.isFavorite,
     required this.onToggleFavorite,
+    required this.navigationController,
   });
 
   @override
@@ -27,20 +30,72 @@ class ParkingDetailScreen extends StatefulWidget {
 }
 
 class _ParkingDetailScreenState extends State<ParkingDetailScreen> {
-  void _openWaze() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Opening Waze...'),
-      ),
+  Future<void> _openWaze() async {
+    final latitude = double.tryParse(
+      widget.parking['latitude'] ?? '',
     );
+
+    final longitude = double.tryParse(
+      widget.parking['longitude'] ?? '',
+    );
+
+    if (latitude == null || longitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Parking location is not available.'),
+        ),
+      );
+      return;
+    }
+
+    try {
+      await widget.navigationController.openWaze(
+        latitude: latitude,
+        longitude: longitude,
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open Waze: $error'),
+        ),
+      );
+    }
   }
 
-  void _openGoogleMaps() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Opening Google Maps...'),
-      ),
+  Future<void> _openGoogleMaps() async {
+    final latitude = double.tryParse(
+      widget.parking['latitude'] ?? '',
     );
+
+    final longitude = double.tryParse(
+      widget.parking['longitude'] ?? '',
+    );
+
+    if (latitude == null || longitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Parking location is not available.'),
+        ),
+      );
+      return;
+    }
+
+    try {
+      await widget.navigationController.openGoogleMaps(
+        latitude: latitude,
+        longitude: longitude,
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open Google Maps: $error'),
+        ),
+      );
+    }
   }
 
   @override

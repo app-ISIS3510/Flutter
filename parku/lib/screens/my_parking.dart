@@ -7,12 +7,14 @@ import '../models/parking_session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import 'end_parking.dart';
+import '../controllers/navigation_controller.dart';
 
 class MyParkingScreen extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onNavTap;
   final Future<void> Function() onEndParking;
   final VoidCallback? onChangePickupTime;
+  final NavigationController navigationController;
 
   final ParkingSession session;
   final Parking parking;
@@ -24,7 +26,9 @@ class MyParkingScreen extends StatefulWidget {
     required this.onEndParking,
     required this.session,
     required this.parking,
+    required this.navigationController,
     this.onChangePickupTime,
+
   });
 
   @override
@@ -52,6 +56,64 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
         }
       },
     );
+  }
+
+  Future<void> _openWaze() async {
+    final latitude = widget.parking.latitude;
+    final longitude = widget.parking.longitude;
+
+    if (latitude == null || longitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Parking location is not available.'),
+        ),
+      );
+      return;
+    }
+
+    try {
+      await widget.navigationController.openWaze(
+        latitude: latitude,
+        longitude: longitude,
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open Waze: $error'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _openGoogleMaps() async {
+    final latitude = widget.parking.latitude;
+    final longitude = widget.parking.longitude;
+
+    if (latitude == null || longitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Parking location is not available.'),
+        ),
+      );
+      return;
+    }
+
+    try {
+      await widget.navigationController.openGoogleMaps(
+        latitude: latitude,
+        longitude: longitude,
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not open Google Maps: $error'),
+        ),
+      );
+    }
   }
 
   void _updateRemainingTime() {
@@ -282,35 +344,17 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                             children: [
                               Expanded(
                                 child: _SecondaryButton(
-                                  text: 'Waze',
-                                  onPressed: () {
-                                    ScaffoldMessenger.of(context)
-                                        .showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Opening Waze...',
-                                        ),
-                                      ),
-                                    );
-                                  },
+                                  text: 'Google Maps',
+                                  onPressed: _openGoogleMaps,
                                 ),
                               ),
-
+                              
                               const SizedBox(width: 12),
 
                               Expanded(
                                 child: _SecondaryButton(
-                                  text: 'Google Maps',
-                                  onPressed: () {
-                                    ScaffoldMessenger.of(context)
-                                        .showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Opening Google Maps...',
-                                        ),
-                                      ),
-                                    );
-                                  },
+                                  text: 'Waze',
+                                  onPressed: _openWaze,
                                 ),
                               ),
                             ],
