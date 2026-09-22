@@ -50,6 +50,21 @@ class _ParkingDetailScreenState extends State<ParkingDetailScreen> {
 
     final String address =
         widget.parking['address'] ?? 'Address unavailable';
+    
+    final String openingTime =
+    widget.parking['openingTime'] ?? '';
+
+    final String closingTime =
+        widget.parking['closingTime'] ?? '';
+
+    final String carSpaces =
+        widget.parking['carSpaces'] ?? '0';
+
+    final String motorcycleSpaces =
+        widget.parking['motorcycleSpaces'] ?? '0';
+
+    final String pricePerMinute =
+        widget.parking['pricePerMinute'] ?? '0';
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -153,9 +168,9 @@ class _ParkingDetailScreenState extends State<ParkingDetailScreen> {
                       ),
                     ),
                     const SizedBox(height: 3),
-                    const Text(
-                      '5:30-20:00',
-                      style: TextStyle(
+                    Text(
+                      '$openingTime - $closingTime',
+                      style: const TextStyle(
                         fontSize: 15,
                         color: AppColors.greyText,
                       ),
@@ -166,16 +181,16 @@ class _ParkingDetailScreenState extends State<ParkingDetailScreen> {
                         Expanded(
                           child: _SpaceCard(
                             icon: Icons.directions_car_outlined,
-                            spaces: '40 spaces',
-                            price: '\$120 min',
+                            spaces: '$carSpaces spaces',
+                            price: '\$$pricePerMinute min',
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: _SpaceCard(
                             icon: Icons.two_wheeler,
-                            spaces: '15 spaces',
-                            price: '\$120 min',
+                            spaces: '$motorcycleSpaces spaces',
+                            price: '\$$pricePerMinute min',
                           ),
                         ),
                       ],

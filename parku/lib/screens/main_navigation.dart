@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../controllers/parking_controller.dart';
+import '../repositories/parking_repository.dart';
+import '../services/parking_service.dart';
+import '../controllers/session_controller.dart';
+import '../repositories/session_repository.dart';
+import '../services/session_service.dart';
 import 'home.dart';
 import 'parking_list.dart';
 import 'my_parking.dart';
@@ -11,6 +19,8 @@ import 'no_favorites.dart';
 import 'search.dart';
 import 'search_results.dart';
 import 'parking_detail.dart';
+import '../models/parking.dart';
+import '../models/parking_session.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -21,6 +31,12 @@ class MainNavigationScreen extends StatefulWidget {
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
+  late final ParkingRepository parkingRepository;
+  late final ParkingService parkingService;
+  late final ParkingController parkingController;
+  late final SessionRepository sessionRepository;
+  late final SessionService sessionService;
+  late final SessionController sessionController;
   int currentIndex = 0;
 
   bool hasActiveParking = true;
@@ -30,6 +46,28 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String parkingName = 'City U Parking';
 
   String parkingAddress = 'Calle 20 · Las Aguas, Bogotá';
+
+  DateTime _buildPickupDateTime(String time) {
+    final parts = time.split(':');
+
+    int hour = int.parse(parts[0]);
+    final minute = int.parse(parts[1]);
+
+    // La pantalla actualmente trabaja con horas PM.
+    if (hour < 12) {
+      hour += 12;
+    }
+
+    final now = DateTime.now();
+
+    return DateTime(
+      now.year,
+      now.month,
+      now.day,
+      hour,
+      minute,
+    );
+  }
 
   final List<Map<String, String>> favorites = [
     {
@@ -49,6 +87,39 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       'address': '250 Civic Center',
     },
   ];
+
+  @override
+  void initState() {
+    super.initState();
+
+    final supabase = Supabase.instance.client;
+
+    parkingRepository = ParkingRepository(supabase);
+    parkingService = ParkingService(parkingRepository);
+    parkingController = ParkingController(parkingService);
+    sessionRepository = SessionRepository(supabase);
+    sessionService = SessionService(sessionRepository);
+    sessionController = SessionController(sessionService);
+  }
+
+  String _formatTimeForPicker(DateTime dateTime) {
+    final localTime = dateTime.toLocal();
+
+    int hour = localTime.hour;
+
+    if (hour >= 12) {
+      hour -= 12;
+    }
+
+    if (hour == 0) {
+      hour = 12;
+    }
+
+    final minute =
+        localTime.minute.toString().padLeft(2, '0');
+
+    return '$hour:$minute';
+  }
 
   void changePage(int index) {
     setState(() {
@@ -159,32 +230,85 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       MaterialPageRoute<void>(
         builder: (context) => PickupTimeScreen(
           onNavTap: changePageFromPickup,
-          onStartParking: (time) {
+
+          onStartParking: (time) async {
+            final parkingId = parking['id'];
+
+            if (parkingId == null || parkingId.isEmpty) {
+              throw Exception('Parking ID is missing');
+            }
+            
+            final alreadyHasActiveSession = await sessionController.hasActiveSession();
+
+            if (alreadyHasActiveSession) {
+              throw Exception(
+                'You already have an active parking session.',
+              );
+            }
+
+            final pickupDateTime = _buildPickupDateTime(time);
+
+            final session = await sessionController.startParking(
+              parkingId: parkingId,
+              pickupTime: pickupDateTime,
+            );
+
+            if (!mounted) return;
+
             Navigator.pop(context);
 
             setState(() {
               pickupTime = time;
-              parkingName = parking['name'] ?? 'Parking lot';
+
+              parkingName =
+                  parking['name'] ?? 'Parking lot';
+
               parkingAddress =
                   parking['address'] ?? 'Address unavailable';
+
               hasActiveParking = true;
+
               currentIndex = 3;
             });
+
+            debugPrint(
+              'Parking session created: ${session.id}',
+            );
           },
         ),
       ),
     );
   }
+  
+  void openChangePickupTime() async {
+    final session =
+        await sessionController.loadActiveSession();
 
-  void openChangePickupTime() {
+    if (session == null) {
+      return;
+    }
+
+    if (!mounted) return;
+
+    final currentTime =
+        _formatTimeForPicker(session.pickupTime);
+
     Navigator.push(
       context,
       MaterialPageRoute<void>(
         builder: (context) => ChangePickupTimeScreen(
-          initialTime: pickupTime,
+          initialTime: currentTime,
           onNavTap: changePageFromPickup,
-          onSave: (time) {
-            Navigator.pop(context);
+          onSave: (time) async {
+            final newPickupTime =
+                _buildPickupDateTime(time);
+
+            await sessionController.changePickupTime(
+              sessionId: session.id,
+              pickupTime: newPickupTime,
+            );
+
+            if (!mounted) return;
 
             setState(() {
               pickupTime = time;
@@ -194,8 +318,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
     );
   }
+  
+  Future<void> endParking() async {
+    final session = await sessionController.loadActiveSession();
 
-  void endParking() {
+    if (session == null) {
+      return;
+    }
+
+    await sessionController.endParking(
+      sessionId: session.id,
+    );
+
+    if (!mounted) return;
+
     setState(() {
       hasActiveParking = false;
     });
@@ -212,6 +348,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         return ParkingListScreen(
           currentIndex: currentIndex,
           onNavTap: changePage,
+          controller: parkingController,
           onSelectParking: openParkingDetail,
           onSearchTap: openSearch,
         );
@@ -235,21 +372,88 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         );
 
       case 3:
-        if (hasActiveParking) {
-          return MyParkingScreen(
-            currentIndex: currentIndex,
-            onNavTap: changePage,
-            onEndParking: endParking,
-            onChangePickupTime: openChangePickupTime,
-            pickupTime: pickupTime,
-            parkingName: parkingName,
-            parkingAddress: parkingAddress,
-          );
-        }
+        return FutureBuilder<ParkingSession?>(
+          future: sessionController.loadActiveSession(),
+          builder: (context, sessionSnapshot) {
+            if (sessionSnapshot.connectionState ==
+                ConnectionState.waiting) {
+              return const Scaffold(
+                body: Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
 
-        return NoActiveParkingScreen(
-          currentIndex: currentIndex,
-          onNavTap: changePage,
+            if (sessionSnapshot.hasError) {
+              return Scaffold(
+                body: Center(
+                  child: Text(
+                    'Error loading parking session:\n'
+                    '${sessionSnapshot.error}',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }
+
+            final session = sessionSnapshot.data;
+
+            if (session == null) {
+              return NoActiveParkingScreen(
+                currentIndex: currentIndex,
+                onNavTap: changePage,
+              );
+            }
+
+            return FutureBuilder<Parking?>(
+              future: parkingController.loadParkingById(
+                session.parkingId,
+              ),
+              builder: (context, parkingSnapshot) {
+                if (parkingSnapshot.connectionState ==
+                    ConnectionState.waiting) {
+                  return const Scaffold(
+                    body: Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+
+                if (parkingSnapshot.hasError) {
+                  return Scaffold(
+                    body: Center(
+                      child: Text(
+                        'Error loading parking:\n'
+                        '${parkingSnapshot.error}',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                }
+
+                final parking = parkingSnapshot.data;
+
+                if (parking == null) {
+                  return const Scaffold(
+                    body: Center(
+                      child: Text(
+                        'Parking lot not found.',
+                      ),
+                    ),
+                  );
+                }
+
+                return MyParkingScreen(
+                  currentIndex: currentIndex,
+                  onNavTap: changePage,
+                  session: session,
+                  parking: parking,
+                  onEndParking: endParking,
+                  onChangePickupTime: openChangePickupTime,
+                );
+              },
+            );
+          },
         );
 
       default:

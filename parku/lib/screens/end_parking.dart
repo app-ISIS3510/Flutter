@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 
-class EndParkingScreen extends StatelessWidget {
-  final VoidCallback onConfirmEndParking;
+class EndParkingScreen extends StatefulWidget {
+  final Future<void> Function() onConfirmEndParking;
   final int currentIndex;
   final ValueChanged<int> onNavTap;
 
@@ -16,6 +16,45 @@ class EndParkingScreen extends StatelessWidget {
   });
 
   @override
+  State<EndParkingScreen> createState() => _EndParkingScreenState();
+}
+
+class _EndParkingScreenState extends State<EndParkingScreen> {
+  bool isEndingParking = false;
+
+  Future<void> _confirmEndParking() async {
+    if (isEndingParking) return;
+
+    setState(() {
+      isEndingParking = true;
+    });
+
+    try {
+      await widget.onConfirmEndParking();
+
+      if (!mounted) return;
+
+      Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not end parking: $error',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isEndingParking = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -24,7 +63,12 @@ class EndParkingScreen extends StatelessWidget {
           children: [
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(30, 22, 30, 20),
+                padding: const EdgeInsets.fromLTRB(
+                  30,
+                  22,
+                  30,
+                  20,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -84,10 +128,9 @@ class EndParkingScreen extends StatelessWidget {
                             width: double.infinity,
                             height: 56,
                             child: ElevatedButton(
-                              onPressed: () {
-                                onConfirmEndParking();
-                                Navigator.pop(context);
-                              },
+                              onPressed: isEndingParking
+                                  ? null
+                                  : _confirmEndParking,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,
                                 foregroundColor: Colors.white,
@@ -96,9 +139,11 @@ class EndParkingScreen extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                               ),
-                              child: const Text(
-                                "Yes, I've picked it up",
-                                style: TextStyle(
+                              child: Text(
+                                isEndingParking
+                                    ? 'Ending parking...'
+                                    : "Yes, I've picked it up",
+                                style: const TextStyle(
                                   fontSize: 17,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -112,9 +157,11 @@ class EndParkingScreen extends StatelessWidget {
                             width: double.infinity,
                             height: 56,
                             child: ElevatedButton(
-                              onPressed: () {
-                                Navigator.pop(context);
-                              },
+                              onPressed: isEndingParking
+                                  ? null
+                                  : () {
+                                      Navigator.pop(context);
+                                    },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.lightPurple,
                                 foregroundColor: AppColors.primary,
@@ -141,10 +188,10 @@ class EndParkingScreen extends StatelessWidget {
             ),
 
             NavBar(
-              currentIndex: currentIndex,
+              currentIndex: widget.currentIndex,
               onTap: (index) {
                 Navigator.pop(context);
-                onNavTap(index);
+                widget.onNavTap(index);
               },
             ),
           ],

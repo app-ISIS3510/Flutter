@@ -7,7 +7,7 @@ import '../widgets/pickup_widgets.dart';
 class ChangePickupTimeScreen extends StatefulWidget {
   final String initialTime;
   final ValueChanged<int> onNavTap;
-  final ValueChanged<String> onSave;
+  final Future<void> Function(String) onSave;
 
   const ChangePickupTimeScreen({
     super.key,
@@ -22,11 +22,44 @@ class ChangePickupTimeScreen extends StatefulWidget {
 
 class _ChangePickupTimeScreenState extends State<ChangePickupTimeScreen> {
   late String selectedTime;
+  bool isSaving = false;
 
   @override
   void initState() {
     super.initState();
     selectedTime = widget.initialTime;
+  }
+
+  Future<void> _savePickupTime() async {
+    if (isSaving) return;
+
+    setState(() {
+      isSaving = true;
+    });
+
+    try {
+      await widget.onSave(selectedTime);
+
+      if (!mounted) return;
+
+      Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not update pickup time: $error',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isSaving = false;
+        });
+      }
+    }
   }
 
   @override
@@ -104,9 +137,14 @@ class _ChangePickupTimeScreenState extends State<ChangePickupTimeScreen> {
                     ),
                     const SizedBox(height: 16),
                     PickupButton(
-                      text: 'Save pickup time',
-                      onPressed: () => widget.onSave(selectedTime),
+                      text: isSaving
+                          ? 'Saving...'
+                          : 'Save pickup time',
+                      onPressed: isSaving
+                          ? () {}
+                          : _savePickupTime,
                     ),
+                      
                     const SizedBox(height: 16),
                     PickupButton(
                       text: 'Back to my parking',

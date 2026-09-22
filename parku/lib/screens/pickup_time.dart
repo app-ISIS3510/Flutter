@@ -7,7 +7,7 @@ import '../widgets/pickup_widgets.dart';
 
 class PickupTimeScreen extends StatefulWidget {
   final ValueChanged<int> onNavTap;
-  final ValueChanged<String> onStartParking;
+  final Future<void> Function(String) onStartParking;
 
   const PickupTimeScreen({
     super.key,
@@ -22,6 +22,35 @@ class PickupTimeScreen extends StatefulWidget {
 class _PickupTimeScreenState extends State<PickupTimeScreen> {
   // Solo cambia la maqueta; no se guarda en un servidor.
   String selectedTime = '4:00';
+  bool isStartingParking = false;
+
+  Future<void> _startParking() async {
+    if (isStartingParking) return;
+
+    setState(() {
+      isStartingParking = true;
+    });
+
+    try {
+      await widget.onStartParking(selectedTime);
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not start parking: $error',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isStartingParking = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -151,8 +180,12 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
                     ),
                     const SizedBox(height: 16),
                     PickupButton(
-                      text: 'Start parking',
-                      onPressed: () => widget.onStartParking(selectedTime),
+                      text: isStartingParking
+                          ? 'Starting parking...'
+                          : 'Start parking',
+                      onPressed: isStartingParking
+                          ? () {}
+                          : _startParking,
                     ),
                     const SizedBox(height: 16),
                     const Text(

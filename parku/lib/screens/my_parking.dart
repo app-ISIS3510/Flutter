@@ -1,28 +1,105 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../models/parking.dart';
+import '../models/parking_session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import 'end_parking.dart';
 
-class MyParkingScreen extends StatelessWidget {
+class MyParkingScreen extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onNavTap;
-  final VoidCallback onEndParking;
+  final Future<void> Function() onEndParking;
   final VoidCallback? onChangePickupTime;
-  final String pickupTime;
-  final String parkingName;
-  final String parkingAddress;
+
+  final ParkingSession session;
+  final Parking parking;
 
   const MyParkingScreen({
     super.key,
     required this.currentIndex,
     required this.onNavTap,
     required this.onEndParking,
+    required this.session,
+    required this.parking,
     this.onChangePickupTime,
-    this.pickupTime = '4:00',
-    this.parkingName = 'City U Parking',
-    this.parkingAddress = 'Calle 20 · Las Aguas, Bogotá',
   });
+
+  @override
+  State<MyParkingScreen> createState() => _MyParkingScreenState();
+}
+
+class _MyParkingScreenState extends State<MyParkingScreen> {
+  Timer? _timer;
+
+  Duration remaining = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _updateRemainingTime();
+
+    _timer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) {
+        if (mounted) {
+          setState(() {
+            _updateRemainingTime();
+          });
+        }
+      },
+    );
+  }
+
+  void _updateRemainingTime() {
+    final now = DateTime.now();
+
+    final pickupTime = widget.session.pickupTime.toLocal();
+
+    final difference = pickupTime.difference(now);
+
+    if (difference.isNegative) {
+      remaining = Duration.zero;
+    } else {
+      remaining = difference;
+    }
+  }
+
+  String get remainingText {
+    final hours = remaining.inHours;
+
+    final minutes = remaining.inMinutes.remainder(60);
+
+    return '${hours.toString().padLeft(2, '0')}:'
+        '${minutes.toString().padLeft(2, '0')}';
+  }
+
+  String get pickupTimeText {
+    final date = widget.session.pickupTime.toLocal();
+
+    int hour = date.hour;
+
+    final String suffix = hour >= 12 ? 'PM' : 'AM';
+
+    hour = hour % 12;
+
+    if (hour == 0) {
+      hour = 12;
+    }
+
+    final minute = date.minute.toString().padLeft(2, '0');
+
+    return '$hour:$minute $suffix';
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,11 +110,15 @@ class MyParkingScreen extends StatelessWidget {
           children: [
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(30, 22, 30, 20),
+                padding: const EdgeInsets.fromLTRB(
+                  30,
+                  22,
+                  30,
+                  20,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // TITLE
                     const Text(
                       'My parking',
                       style: TextStyle(
@@ -49,7 +130,6 @@ class MyParkingScreen extends StatelessWidget {
 
                     const SizedBox(height: 30),
 
-                    // TIME LABEL
                     const Center(
                       child: Text(
                         'TIME UNTIL PICKUP',
@@ -63,7 +143,6 @@ class MyParkingScreen extends StatelessWidget {
 
                     const SizedBox(height: 12),
 
-                    // COUNTDOWN CIRCLE
                     Center(
                       child: Container(
                         width: 250,
@@ -81,29 +160,29 @@ class MyParkingScreen extends StatelessWidget {
                             shape: BoxShape.circle,
                             color: AppColors.background,
                           ),
-                          child: const Column(
+                          child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
+                              const Icon(
                                 Icons.timer_outlined,
                                 color: AppColors.primary,
                                 size: 38,
                               ),
 
-                              SizedBox(height: 8),
+                              const SizedBox(height: 8),
 
                               Text(
-                                '01:30',
-                                style: TextStyle(
+                                remainingText,
+                                style: const TextStyle(
                                   fontSize: 50,
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.primary,
                                 ),
                               ),
 
-                              SizedBox(height: 4),
+                              const SizedBox(height: 4),
 
-                              Text(
+                              const Text(
                                 'hours : minutes',
                                 style: TextStyle(
                                   fontSize: 14,
@@ -118,12 +197,11 @@ class MyParkingScreen extends StatelessWidget {
 
                     const SizedBox(height: 16),
 
-                    // PICKUP TIME
                     Center(
                       child: Text.rich(
                         TextSpan(
                           children: [
-                            TextSpan(
+                            const TextSpan(
                               text: 'Pick up at ',
                               style: TextStyle(
                                 fontSize: 17,
@@ -131,8 +209,8 @@ class MyParkingScreen extends StatelessWidget {
                               ),
                             ),
                             TextSpan(
-                              text: '$pickupTime PM',
-                              style: TextStyle(
+                              text: pickupTimeText,
+                              style: const TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.darkText,
@@ -145,20 +223,19 @@ class MyParkingScreen extends StatelessWidget {
 
                     const SizedBox(height: 20),
 
-                    // PARKING INFORMATION CARD
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
+                                                borderRadius: BorderRadius.circular(24),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            parkingName,
-                            style: TextStyle(
+                            widget.parking.name,
+                            style: const TextStyle(
                               fontSize: 23,
                               fontWeight: FontWeight.w700,
                               color: AppColors.darkText,
@@ -167,6 +244,7 @@ class MyParkingScreen extends StatelessWidget {
 
                           const SizedBox(height: 10),
 
+                          // Temporal hasta conectar vehículos reales
                           const Row(
                             children: [
                               Text(
@@ -191,8 +269,8 @@ class MyParkingScreen extends StatelessWidget {
                           const SizedBox(height: 8),
 
                           Text(
-                            parkingAddress,
-                            style: TextStyle(
+                            widget.parking.address,
+                            style: const TextStyle(
                               fontSize: 15,
                               color: AppColors.greyText,
                             ),
@@ -200,13 +278,21 @@ class MyParkingScreen extends StatelessWidget {
 
                           const SizedBox(height: 18),
 
-                          // MAP BUTTONS
                           Row(
                             children: [
                               Expanded(
                                 child: _SecondaryButton(
                                   text: 'Waze',
-                                  onPressed: () {},
+                                  onPressed: () {
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Opening Waze...',
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
 
@@ -215,7 +301,16 @@ class MyParkingScreen extends StatelessWidget {
                               Expanded(
                                 child: _SecondaryButton(
                                   text: 'Google Maps',
-                                  onPressed: () {},
+                                  onPressed: () {
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Opening Google Maps...',
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                             ],
@@ -231,14 +326,14 @@ class MyParkingScreen extends StatelessWidget {
                       width: double.infinity,
                       height: 58,
                       child: ElevatedButton(
-                        onPressed: onChangePickupTime,
+                        onPressed: widget.onChangePickupTime,
                         style: ElevatedButton.styleFrom(
                           elevation: 0,
                           backgroundColor: AppColors.lightPurple,
                           foregroundColor: AppColors.primary,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
-                          ),
+                                                    ),
                         ),
                         child: const Text(
                           'Change pickup time',
@@ -260,11 +355,12 @@ class MyParkingScreen extends StatelessWidget {
                         onPressed: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
+                            MaterialPageRoute<void>(
                               builder: (context) => EndParkingScreen(
-                                currentIndex: currentIndex,
-                                onNavTap: onNavTap,
-                                onConfirmEndParking: onEndParking,
+                                currentIndex: widget.currentIndex,
+                                onNavTap: widget.onNavTap,
+                                onConfirmEndParking:
+                                    widget.onEndParking,
                               ),
                             ),
                           );
@@ -292,8 +388,8 @@ class MyParkingScreen extends StatelessWidget {
             ),
 
             NavBar(
-              currentIndex: currentIndex,
-              onTap: onNavTap,
+              currentIndex: widget.currentIndex,
+              onTap: widget.onNavTap,
             ),
           ],
         ),
@@ -336,3 +432,5 @@ class _SecondaryButton extends StatelessWidget {
     );
   }
 }
+                       
+                       

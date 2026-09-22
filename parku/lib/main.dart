@@ -2,8 +2,19 @@ import 'package:flutter/material.dart';
 
 import 'theme/app_theme.dart';
 import 'screens/main_navigation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+
+  await Supabase.initialize(
+    url: 'https://wwvkgpstphxeldscncyf.supabase.co',
+    publishableKey: 'sb_publishable_i7kN0azgQ2JYTD1bm33ZFA_c6mLTnjN',
+  );
+
+  print(Supabase.instance.client);
+
   runApp(const ParkUApp());
 }
 

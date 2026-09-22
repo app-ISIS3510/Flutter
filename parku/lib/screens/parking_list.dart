@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../controllers/parking_controller.dart';
+import '../models/parking.dart';
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/parking_card.dart';
@@ -10,39 +12,19 @@ class ParkingListScreen extends StatelessWidget {
   final ValueChanged<Map<String, String>>? onSelectParking;
   final VoidCallback? onSearchTap;
 
+  final ParkingController controller;
+
   const ParkingListScreen({
     super.key,
     required this.currentIndex,
     required this.onNavTap,
-    this.onSelectParking, 
+    required this.controller,
+    this.onSelectParking,
     this.onSearchTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final parkingLots = [
-      {
-        'name': 'City U Parking',
-        'address': 'Calle 20 · Las Aguas, Bogotá',
-        'type': 'Cars and motorcycles · Indoor',
-      },
-      {
-        'name': 'MetroPark Center',
-        'address': '45 Market St',
-        'type': 'Indoor',
-      },
-      {
-        'name': 'University Lot C',
-        'address': '102 Campus Drive',
-        'type': 'Outdoor',
-      },
-      {
-        'name': 'Library Underground',
-        'address': '250 Civic Center',
-        'type': 'Indoor',
-      },
-    ];
-
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -68,7 +50,7 @@ class ParkingListScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: InkWell(
-              onTap: onSearchTap,
+                onTap: onSearchTap,
                 borderRadius: BorderRadius.circular(16),
                 child: Container(
                   height: 58,
@@ -118,21 +100,86 @@ class ParkingListScreen extends StatelessWidget {
 
             const SizedBox(height: 16),
 
-            // LIST
+            // LIST FROM SUPABASE
             Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                itemCount: parkingLots.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 14),
-                itemBuilder: (context, index) {
-                  final parking = parkingLots[index];
+              child: FutureBuilder<List<Parking>>(
+                future: controller.loadParkingLots(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState ==
+                      ConnectionState.waiting) {
+                    return const Center(
+                      child: CircularProgressIndicator(),
+                    );
+                  }
 
-                  return ParkingCard(
-                    name: parking['name']!,
-                    address: parking['address']!,
-                    type: parking['type']!,
-                    onTap: onSelectParking == null ? null : () => onSelectParking!(parking),
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: Text(
+                          'Error loading parking lots:\n${snapshot.error}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.red,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  final parkingLots = snapshot.data ?? [];
+
+                  if (parkingLots.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'No parking lots available.',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: AppColors.greyText,
+                        ),
+                      ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    itemCount: parkingLots.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 14),
+                    itemBuilder: (context, index) {
+                      final parking = parkingLots[index];
+
+                      return ParkingCard(
+                        name: parking.name,
+                        address: parking.address,
+
+                        // Por ahora lo construimos con los datos reales.
+                        type:
+                            '${parking.carSpaces} car spaces · '
+                            '${parking.motorcycleSpaces} motorcycle spaces',
+
+                        onTap: onSelectParking == null
+                            ? null
+                            : () {
+                                onSelectParking!({
+                                  'id': parking.id,
+                                  'name': parking.name,
+                                  'address': parking.address,
+                                  'carSpaces':
+                                      parking.carSpaces.toString(),
+                                  'motorcycleSpaces':
+                                      parking.motorcycleSpaces.toString(),
+                                  'pricePerMinute':
+                                      parking.pricePerMinute.toString(),
+                                  'openingTime':
+                                      parking.openingTime ?? '',
+                                  'closingTime':
+                                      parking.closingTime ?? '',
+                                });
+                              },
+                      );
+                    },
                   );
                 },
               ),
@@ -150,4 +197,3 @@ class ParkingListScreen extends StatelessWidget {
     );
   }
 }
-
