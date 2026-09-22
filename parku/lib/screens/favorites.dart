@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../models/parking.dart';
 import '../theme/app_theme.dart';
 import '../widgets/design_icon.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/pickup_widgets.dart';
 
 class FavoritesScreen extends StatelessWidget {
-  final List<Map<String, String>> favorites;
-  final ValueChanged<int> onRemove;
+  final List<Parking> favorites;
+  final ValueChanged<Parking> onRemove;
   final ValueChanged<int> onNavTap;
   final ValueChanged<Map<String, String>> onSelectParking;
 
@@ -18,6 +19,19 @@ class FavoritesScreen extends StatelessWidget {
     required this.onNavTap,
     required this.onSelectParking,
   });
+
+  Map<String, String> _parkingToMap(Parking parking) {
+    return {
+      'id': parking.id,
+      'name': parking.name,
+      'address': parking.address,
+      'carSpaces': parking.carSpaces.toString(),
+      'motorcycleSpaces': parking.motorcycleSpaces.toString(),
+      'pricePerMinute': parking.pricePerMinute.toString(),
+      'openingTime': parking.openingTime ?? '',
+      'closingTime': parking.closingTime ?? '',
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +52,9 @@ class FavoritesScreen extends StatelessWidget {
                   const ScreenHeader(
                     title: 'Favorites',
                   ),
+
                   const SizedBox(height: 33),
+
                   const Text(
                     'Your saved places, always handy.',
                     style: TextStyle(
@@ -47,11 +63,15 @@ class FavoritesScreen extends StatelessWidget {
                       color: AppColors.greyText,
                     ),
                   ),
+
                   const SizedBox(height: 12),
-                  for (int i = 0; i < favorites.length; i++) ...[
+
+                  for (final parking in favorites) ...[
                     InkWell(
                       onTap: () {
-                        onSelectParking(favorites[i]);
+                        onSelectParking(
+                          _parkingToMap(parking),
+                        );
                       },
                       borderRadius: BorderRadius.circular(20),
                       child: Container(
@@ -64,13 +84,14 @@ class FavoritesScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
                               children: [
                                 const DesignIcon('heart'),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    favorites[i]['name'] ?? 'Parking lot',
+                                    parking.name,
                                     style: const TextStyle(
                                       fontSize: 17,
                                       height: 1.35,
@@ -85,36 +106,40 @@ class FavoritesScreen extends StatelessWidget {
                                 ),
                               ],
                             ),
+
                             const SizedBox(height: 8),
+
                             Text(
-                              favorites[i]['address'] ??
-                                  'Address unavailable',
+                              parking.address,
                               style: const TextStyle(
                                 fontSize: 12,
                                 height: 1.35,
                                 color: AppColors.greyText,
                               ),
                             ),
+
                             const SizedBox(height: 8),
+
                             PickupButton(
                               text: 'Remove',
                               height: 44,
                               background: AppColors.white,
                               foreground: AppColors.primary,
                               onPressed: () {
-                                onRemove(i);
+                                onRemove(parking);
                               },
                             ),
                           ],
                         ),
                       ),
                     ),
-                    if (i < favorites.length - 1)
-                      const SizedBox(height: 12),
+
+                    const SizedBox(height: 12),
                   ],
                 ],
               ),
             ),
+
             NavBar(
               currentIndex: 2,
               onTap: onNavTap,

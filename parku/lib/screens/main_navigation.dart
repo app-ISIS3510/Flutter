@@ -8,6 +8,9 @@ import '../services/parking_service.dart';
 import '../controllers/session_controller.dart';
 import '../repositories/session_repository.dart';
 import '../services/session_service.dart';
+import '../controllers/favorite_controller.dart';
+import '../repositories/favorite_repository.dart';
+import '../services/favorite_service.dart';
 import 'home.dart';
 import 'parking_list.dart';
 import 'my_parking.dart';
@@ -37,6 +40,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   late final SessionRepository sessionRepository;
   late final SessionService sessionService;
   late final SessionController sessionController;
+  late final FavoriteRepository favoriteRepository;
+  late final FavoriteService favoriteService;
+  late final FavoriteController favoriteController;
   int currentIndex = 0;
 
   bool hasActiveParking = true;
@@ -69,25 +75,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  final List<Map<String, String>> favorites = [
-    {
-      'name': 'City U Parking',
-      'address': 'Calle 20 · Las Aguas, Bogotá',
-    },
-    {
-      'name': 'MetroPark Center',
-      'address': '45 Market St',
-    },
-    {
-      'name': 'University Lot C',
-      'address': '102 Campus Drive',
-    },
-    {
-      'name': 'Library Underground',
-      'address': '250 Civic Center',
-    },
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -100,6 +87,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     sessionRepository = SessionRepository(supabase);
     sessionService = SessionService(sessionRepository);
     sessionController = SessionController(sessionService);
+    favoriteRepository = FavoriteRepository(supabase);
+    favoriteService = FavoriteService(favoriteRepository);
+    favoriteController = FavoriteController(favoriteService);
   }
 
   String _formatTimeForPicker(DateTime dateTime) {
@@ -127,28 +117,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
   }
 
-  bool isParkingFavorite(Map<String, String> parking) {
-    return favorites.any(
-      (favorite) => favorite['name'] == parking['name'],
-    );
-  }
-
-  void toggleFavorite(Map<String, String> parking) {
-    setState(() {
-      final index = favorites.indexWhere(
-        (favorite) => favorite['name'] == parking['name'],
-      );
-
-      if (index >= 0) {
-        favorites.removeAt(index);
-      } else {
-        favorites.add({
-          'name': parking['name'] ?? '',
-          'address': parking['address'] ?? '',
-        });
-      }
-    });
-  }
 
   void openSearch() {
     Navigator.push(
@@ -185,7 +153,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  void openParkingDetail(Map<String, String> parking) {
+  void openParkingDetail(Map<String, String> parking) async {
+    final parkingId = parking['id'];
+
+    if (parkingId == null || parkingId.isEmpty) {
+      return;
+    }
+
+    bool isFavorite =
+        await favoriteController.isFavorite(parkingId);
+
+    if (!mounted) return;
+
     Navigator.push(
       context,
       MaterialPageRoute<void>(
@@ -195,11 +174,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               return ParkingDetailScreen(
                 parking: parking,
                 currentIndex: 1,
-                isFavorite: isParkingFavorite(parking),
-                onToggleFavorite: () {
-                  toggleFavorite(parking);
+                isFavorite: isFavorite,
+
+                onToggleFavorite: () async {
+                  await favoriteController.toggleFavorite(
+                    parkingId,
+                  );
+
+                  isFavorite =
+                      await favoriteController.isFavorite(
+                    parkingId,
+                  );
+
                   refreshDetail(() {});
                 },
+
                 onNavTap: (index) {
                   Navigator.popUntil(
                     context,
@@ -208,6 +197,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
                   changePage(index);
                 },
+
                 onParkHere: () {
                   openPickupTime(parking);
                 },
@@ -354,20 +344,52 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         );
 
       case 2:
-        if (favorites.isEmpty) {
-          return NoFavoritesScreen(
-            onNavTap: changePage,
-          );
-        }
+        return FutureBuilder<List<Parking>>(
+          future: favoriteController.loadFavorites(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState ==
+                ConnectionState.waiting) {
+              return const Scaffold(
+                body: Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
 
-        return FavoritesScreen(
-          favorites: favorites,
-          onNavTap: changePage,
-          onSelectParking: openParkingDetail,
-          onRemove: (index) {
-            setState(() {
-              favorites.removeAt(index);
-            });
+            if (snapshot.hasError) {
+              return Scaffold(
+                body: Center(
+                  child: Text(
+                    'Error loading favorites:\n${snapshot.error}',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }
+
+            final favorites = snapshot.data ?? [];
+
+            if (favorites.isEmpty) {
+              return NoFavoritesScreen(
+                onNavTap: changePage,
+              );
+            }
+
+            return FavoritesScreen(
+              favorites: favorites,
+              onNavTap: changePage,
+              onSelectParking: openParkingDetail,
+
+              onRemove: (parking) async {
+                await favoriteController.removeFavorite(
+                  parking.id,
+                );
+
+                if (!mounted) return;
+
+                setState(() {});
+              },
+            );
           },
         );
 
