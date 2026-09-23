@@ -17,5 +17,13 @@ class ParkingController {
   Future<List<Parking>> searchParkingLots(String query) {
     return service.searchParkingLots(query);
   }
+
+  Future<List<Parking>> loadNearestParkingLots({
+    int limit = 4,
+  }) {
+    return service.getNearestParkingLots(
+      limit: limit,
+    );
+  }
   
 }

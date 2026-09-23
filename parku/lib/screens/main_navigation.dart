@@ -19,6 +19,7 @@ import '../services/analytics_service.dart';
 import '../controllers/dashboard_controller.dart';
 import '../repositories/dashboard_repository.dart';
 import '../services/dashboard_service.dart';
+import '../services/distance_manager.dart';
 import 'analytics_dashboard.dart';
 import 'home.dart';
 import 'parking_list.dart';
@@ -60,18 +61,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   late final DashboardRepository dashboardRepository;
   late final DashboardService dashboardService;
   late final DashboardController dashboardController;
+  late final DistanceManager distanceManager;
+
   int currentIndex = 0;
 
   DateTime _buildPickupDateTime(String time) {
     final parts = time.split(':');
 
-    int hour = int.parse(parts[0]);
+    final hour = int.parse(parts[0]);
     final minute = int.parse(parts[1]);
-
-    // La pantalla actualmente trabaja con horas PM.
-    if (hour < 12) {
-      hour += 12;
-    }
 
     final now = DateTime.now();
 
@@ -91,8 +89,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final supabase = Supabase.instance.client;
 
     parkingRepository = ParkingRepository(supabase);
-    parkingService = ParkingService(parkingRepository);
-    parkingController = ParkingController(parkingService);
+    distanceManager = DistanceManager();
+    parkingService = ParkingService(
+        parkingRepository,
+        distanceManager,
+      );
+
+parkingController =
+    ParkingController(parkingService);
     sessionRepository = SessionRepository(supabase);
     sessionService = SessionService(sessionRepository);
     sessionController = SessionController(sessionService);
@@ -269,9 +273,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     context,
     MaterialPageRoute<void>(
       builder: (context) => PickupTimeScreen(
-        onNavTap: changePageFromPickup,
+          onNavTap: changePageFromPickup,
 
-        onStartParking: (time) async {
+          openingTime:
+              parking['openingTime'] ?? '00:00:00',
+
+          closingTime:
+              parking['closingTime'] ?? '23:59:00',
+
+          onStartParking: (time) async {
           final parkingId = parking['id'];
 
           if (parkingId == null || parkingId.isEmpty) {

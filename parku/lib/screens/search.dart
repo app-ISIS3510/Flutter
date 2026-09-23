@@ -150,7 +150,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     ),
                     const SizedBox(height: 14),
                     const Text(
-                      'SUGGESTED PARKING LOTS',
+                      'NEAREST PARKING LOTS',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
@@ -159,7 +159,11 @@ class _SearchScreenState extends State<SearchScreen> {
                     ),
                     const SizedBox(height: 12),
                     FutureBuilder<List<Parking>>(
-                      future: widget.parkingController.loadParkingLots(),
+                      future:
+                          widget.parkingController
+                              .loadNearestParkingLots(
+                        limit: 4,
+                      ),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState ==
                             ConnectionState.waiting) {
@@ -178,7 +182,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         }
 
                         final suggestedParkingLots =
-                            (snapshot.data ?? []).take(4).toList();
+                            snapshot.data ?? [];
 
                         if (suggestedParkingLots.isEmpty) {
                           return const SizedBox.shrink();
