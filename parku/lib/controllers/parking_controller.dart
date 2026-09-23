@@ -13,4 +13,9 @@ class ParkingController {
   Future<Parking?> loadParkingById(String id) {
     return service.getParkingById(id);
   }
+
+  Future<List<Parking>> searchParkingLots(String query) {
+    return service.searchParkingLots(query);
+  }
+  
 }

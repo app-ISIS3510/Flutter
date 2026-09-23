@@ -50,14 +50,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   int currentIndex = 0;
 
-  bool hasActiveParking = true;
-
-  String pickupTime = '4:00';
-
-  String parkingName = 'City U Parking';
-
-  String parkingAddress = 'Calle 20 · Las Aguas, Bogotá';
-
   DateTime _buildPickupDateTime(String time) {
     final parts = time.split(':');
 
@@ -131,6 +123,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       MaterialPageRoute<void>(
         builder: (context) => SearchScreen(
           currentIndex: 1,
+          parkingController: parkingController,
           onNavTap: (index) {
             Navigator.pop(context);
             changePage(index);
@@ -142,6 +135,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 builder: (context) => SearchResultsScreen(
                   initialQuery: query,
                   currentIndex: 1,
+                  parkingController: parkingController,
                   onNavTap: (index) {
                     Navigator.popUntil(
                       context,
@@ -256,16 +250,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             Navigator.pop(context);
 
             setState(() {
-              pickupTime = time;
-
-              parkingName =
-                  parking['name'] ?? 'Parking lot';
-
-              parkingAddress =
-                  parking['address'] ?? 'Address unavailable';
-
-              hasActiveParking = true;
-
               currentIndex = 3;
             });
 
@@ -308,9 +292,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
             if (!mounted) return;
 
-            setState(() {
-              pickupTime = time;
-            });
           },
         ),
       ),
@@ -330,9 +311,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     if (!mounted) return;
 
-    setState(() {
-      hasActiveParking = false;
-    });
   }
 
   void openMyParking() {
@@ -491,9 +469,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         return HomeScreen(
           currentIndex: currentIndex,
           onNavTap: changePage,
-          hasActiveParking: hasActiveParking,
           onOpenMyParking: openMyParking,
           onSelectParking: openParkingDetail,
+          parkingController: parkingController,
+          sessionController: sessionController,
         );
     }
   }

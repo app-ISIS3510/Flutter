@@ -13,4 +13,8 @@ class ParkingService {
   Future<Parking?> getParkingById(String id) {
     return repository.getParkingById(id);
   }
+
+  Future<List<Parking>> searchParkingLots(String query) {
+    return repository.searchParkingLots(query);
+  }
 }

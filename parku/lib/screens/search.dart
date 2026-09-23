@@ -2,17 +2,21 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
+import '../controllers/parking_controller.dart';
+import '../models/parking.dart';
 
 class SearchScreen extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onNavTap;
   final ValueChanged<String> onSearch;
+  final ParkingController parkingController;
 
   const SearchScreen({
     super.key,
     required this.currentIndex,
     required this.onNavTap,
     required this.onSearch,
+    required this.parkingController,
   });
 
   @override
@@ -23,13 +27,7 @@ class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
 
-  final List<String> suggestedParkingLots = [
-    'City U Parking',
-    'MetroPark Center',
-    'University Lot C',
-    'Library Underground',
-  ];
-
+  
   @override
   void initState() {
     super.initState();
@@ -160,34 +158,76 @@ class _SearchScreenState extends State<SearchScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    ...suggestedParkingLots.map(
-                      (parkingName) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: InkWell(
-                          onTap: () => _selectSuggestion(parkingName),
-                          borderRadius: BorderRadius.circular(14),
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 14,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.white,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Text(
-                              parkingName,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.primary,
+                    FutureBuilder<List<Parking>>(
+                      future: widget.parkingController.loadParkingLots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(
+                                vertical: 20,
                               ),
+                              child: CircularProgressIndicator(),
                             ),
-                          ),
-                        ),
-                      ),
+                          );
+                        }
+
+                        if (snapshot.hasError) {
+                          return const SizedBox.shrink();
+                        }
+
+                        final suggestedParkingLots =
+                            (snapshot.data ?? []).take(4).toList();
+
+                        if (suggestedParkingLots.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+
+                        return Column(
+                          children: suggestedParkingLots.map(
+                            (parking) {
+                              return Padding(
+                                padding: const EdgeInsets.only(
+                                  bottom: 10,
+                                ),
+                                child: InkWell(
+                                  onTap: () {
+                                    _selectSuggestion(
+                                      parking.name,
+                                    );
+                                  },
+                                  borderRadius:
+                                      BorderRadius.circular(14),
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding:
+                                        const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.white,
+                                      borderRadius:
+                                          BorderRadius.circular(14),
+                                    ),
+                                    child: Text(
+                                      parking.name,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ).toList(),
+                        );
+                      },
                     ),
+                  
                   ],
                 ),
               ),
