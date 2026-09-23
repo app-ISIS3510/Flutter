@@ -27,6 +27,7 @@ class HomeScreen extends StatelessWidget {
     required this.onSelectParking,
     required this.parkingController,
     required this.sessionController,
+
   });
 
   Map<String, String> _parkingToMap(Parking parking) {
@@ -36,8 +37,8 @@ class HomeScreen extends StatelessWidget {
       'address': parking.address,
       'latitude': parking.latitude?.toString() ?? '',
       'longitude': parking.longitude?.toString() ?? '',
-      'carSpaces': parking.carSpaces.toString(),
-      'motorcycleSpaces': parking.motorcycleSpaces.toString(),
+      'carSpaces': parking.availableCarSpaces.toString(),
+      'motorcycleSpaces': parking.availableMotorcycleSpaces.toString(),
       'pricePerMinute': parking.pricePerMinute.toString(),
       'openingTime': parking.openingTime ?? '',
       'closingTime': parking.closingTime ?? '',

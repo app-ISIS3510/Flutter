@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import '../controllers/navigation_controller.dart';
+import '../controllers/analytics_controller.dart';
 
 class ParkingDetailScreen extends StatefulWidget {
   final Map<String, String> parking;
@@ -12,6 +13,7 @@ class ParkingDetailScreen extends StatefulWidget {
   final bool isFavorite;
   final VoidCallback onToggleFavorite;
   final NavigationController navigationController;
+  final AnalyticsController analyticsController;
 
   const ParkingDetailScreen({
     super.key,
@@ -22,6 +24,7 @@ class ParkingDetailScreen extends StatefulWidget {
     required this.isFavorite,
     required this.onToggleFavorite,
     required this.navigationController,
+    required this.analyticsController,
   });
 
   @override
@@ -49,7 +52,17 @@ class _ParkingDetailScreenState extends State<ParkingDetailScreen> {
     }
 
     try {
-      await widget.navigationController.openWaze(
+
+      await widget.analyticsController.track(
+        eventType: 'navigation_opened',
+        screen: 'parking_detail',
+        parkingId: widget.parking['id'],
+        metadata: {
+          'provider': 'waze',
+        },
+      );
+
+          await widget.navigationController.openWaze(
         latitude: latitude,
         longitude: longitude,
       );
@@ -83,6 +96,14 @@ class _ParkingDetailScreenState extends State<ParkingDetailScreen> {
     }
 
     try {
+      await widget.analyticsController.track(
+        eventType: 'navigation_opened',
+        screen: 'parking_detail',
+        parkingId: widget.parking['id'],
+        metadata: {
+          'provider': 'google_maps',
+        },
+      );
       await widget.navigationController.openGoogleMaps(
         latitude: latitude,
         longitude: longitude,

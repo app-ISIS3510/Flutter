@@ -10,19 +10,22 @@ class SessionRepository {
   Future<ParkingSession> createSession({
     required String parkingId,
     required DateTime pickupTime,
+    String vehicleType = 'car',
   }) async {
-    final response = await client
-        .from('parking_sessions')
-        .insert({
-          'parking_id': parkingId,
-          'pickup_time': pickupTime.toUtc().toIso8601String(),
-          'status': 'active',
-        })
-        .select()
-        .single();
+    final response = await client.rpc(
+      'start_parking_session',
+      params: {
+        'p_parking_id': parkingId,
+        'p_pickup_time':
+            pickupTime.toUtc().toIso8601String(),
+        'p_vehicle_type': vehicleType,
+      },
+    );
 
-    return ParkingSession.fromMap(response);
-  }
+  return ParkingSession.fromMap(
+    response as Map<String, dynamic>,
+  );
+}
 
   Future<ParkingSession?> getActiveSession() async {
     final response = await client

@@ -9,7 +9,7 @@ class ParkingRepository {
 
   Future<List<Parking>> getParkingLots() async {
     final response = await client
-        .from('parking_lots')
+        .from('parking_lots_with_availability')
         .select()
         .order('name');
 
@@ -20,7 +20,7 @@ class ParkingRepository {
 
   Future<Parking?> getParkingById(String id) async {
     final response = await client
-        .from('parking_lots')
+        .from('parking_lots_with_availability')
         .select()
         .eq('id', id)
         .maybeSingle();
@@ -40,7 +40,7 @@ class ParkingRepository {
     }
 
     final response = await client
-        .from('parking_lots')
+        .from('parking_lots_with_availability')
         .select()
         .or(
           'name.ilike.%$trimmedQuery%,address.ilike.%$trimmedQuery%',

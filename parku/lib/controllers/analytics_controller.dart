@@ -1,9 +1,9 @@
-import '../repositories/analytics_repository.dart';
+import '../services/analytics_service.dart';
 
-class AnalyticsService {
-  final AnalyticsRepository repository;
+class AnalyticsController {
+  final AnalyticsService service;
 
-  AnalyticsService(this.repository);
+  AnalyticsController(this.service);
 
   Future<void> track({
     required String eventType,
@@ -11,7 +11,7 @@ class AnalyticsService {
     String? parkingId,
     Map<String, dynamic>? metadata,
   }) {
-    return repository.trackEvent(
+    return service.track(
       eventType: eventType,
       screen: screen,
       parkingId: parkingId,

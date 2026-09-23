@@ -169,9 +169,9 @@ class ParkingListScreen extends StatelessWidget {
                                   'latitude': parking.latitude?.toString() ?? '', 
                                   'longitude': parking.longitude?.toString() ?? '',
                                   'carSpaces':
-                                      parking.carSpaces.toString(),
+                                      parking.availableCarSpaces.toString(),
                                   'motorcycleSpaces':
-                                      parking.motorcycleSpaces.toString(),
+                                      parking.availableMotorcycleSpaces.toString(),
                                   'pricePerMinute':
                                       parking.pricePerMinute.toString(),
                                   'openingTime':

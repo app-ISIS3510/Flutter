@@ -9,6 +9,8 @@ class Parking {
   final double pricePerMinute;
   final String? openingTime;
   final String? closingTime;
+  final int availableCarSpaces;
+  final int availableMotorcycleSpaces;
 
   Parking({
     required this.id,
@@ -21,6 +23,8 @@ class Parking {
     required this.pricePerMinute,
     this.openingTime,
     this.closingTime,
+    required this.availableCarSpaces,
+    required this.availableMotorcycleSpaces,
   });
 
   factory Parking.fromMap(Map<String, dynamic> map) {
@@ -36,6 +40,15 @@ class Parking {
           (map['price_per_minute'] as num?)?.toDouble() ?? 0,
       openingTime: map['opening_time']?.toString(),
       closingTime: map['closing_time']?.toString(),
+      availableCarSpaces:
+          map['available_car_spaces'] as int? ??
+          map['car_spaces'] as int? ??
+          0,
+
+      availableMotorcycleSpaces:
+          map['available_motorcycle_spaces'] as int? ??
+          map['motorcycle_spaces'] as int? ??
+          0,
     );
   }
 }

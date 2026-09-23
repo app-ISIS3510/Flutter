@@ -13,6 +13,13 @@ import '../repositories/favorite_repository.dart';
 import '../services/favorite_service.dart';
 import '../controllers/navigation_controller.dart';
 import '../services/navigation_service.dart';
+import '../controllers/analytics_controller.dart';
+import '../repositories/analytics_repository.dart';
+import '../services/analytics_service.dart';
+import '../controllers/dashboard_controller.dart';
+import '../repositories/dashboard_repository.dart';
+import '../services/dashboard_service.dart';
+import 'analytics_dashboard.dart';
 import 'home.dart';
 import 'parking_list.dart';
 import 'my_parking.dart';
@@ -47,7 +54,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   late final FavoriteController favoriteController;
   late final NavigationService navigationService;
   late final NavigationController navigationController;
-
+  late final AnalyticsRepository analyticsRepository;
+  late final AnalyticsService analyticsService;
+  late final AnalyticsController analyticsController;
+  late final DashboardRepository dashboardRepository;
+  late final DashboardService dashboardService;
+  late final DashboardController dashboardController;
   int currentIndex = 0;
 
   DateTime _buildPickupDateTime(String time) {
@@ -89,6 +101,26 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     favoriteController = FavoriteController(favoriteService);
     navigationService = NavigationService.create();
     navigationController = NavigationController(navigationService);
+    analyticsRepository = AnalyticsRepository(supabase);
+    analyticsService = AnalyticsService(analyticsRepository);
+    analyticsController = AnalyticsController(analyticsService);
+    dashboardRepository = DashboardRepository(supabase);
+    dashboardService = DashboardService(dashboardRepository);
+    dashboardController = DashboardController(dashboardService);
+  }
+
+  void openAnalyticsDashboard() {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (context) {
+          return AnalyticsDashboardScreen(
+            dashboardController:
+                dashboardController,
+          );
+        },
+      ),
+    );
   }
 
   String _formatTimeForPicker(DateTime dateTime) {
@@ -161,6 +193,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       return;
     }
 
+    await analyticsController.track(
+      eventType: 'parking_detail_viewed',
+      screen: 'parking_detail',
+      parkingId: parkingId,
+    );
+
     bool isFavorite =
         await favoriteController.isFavorite(parkingId);
 
@@ -177,15 +215,25 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 currentIndex: 1,
                 isFavorite: isFavorite,
                 navigationController: navigationController,
+                analyticsController: analyticsController,
 
                 onToggleFavorite: () async {
+                  final wasFavorite = isFavorite;
+
                   await favoriteController.toggleFavorite(
                     parkingId,
                   );
 
-                  isFavorite =
-                      await favoriteController.isFavorite(
+                  isFavorite = await favoriteController.isFavorite(
                     parkingId,
+                  );
+
+                  await analyticsController.track(
+                    eventType: wasFavorite
+                        ? 'favorite_removed'
+                        : 'favorite_added',
+                    screen: 'parking_detail',
+                    parkingId: parkingId,
                   );
 
                   refreshDetail(() {});
@@ -217,37 +265,54 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   void openPickupTime(Map<String, String> parking) {
-    Navigator.push(
-      context,
-      MaterialPageRoute<void>(
-        builder: (context) => PickupTimeScreen(
-          onNavTap: changePageFromPickup,
+  Navigator.push(
+    context,
+    MaterialPageRoute<void>(
+      builder: (context) => PickupTimeScreen(
+        onNavTap: changePageFromPickup,
 
-          onStartParking: (time) async {
-            final parkingId = parking['id'];
+        onStartParking: (time) async {
+          final parkingId = parking['id'];
 
-            if (parkingId == null || parkingId.isEmpty) {
-              throw Exception('Parking ID is missing');
-            }
-            
-            final alreadyHasActiveSession = await sessionController.hasActiveSession();
+          if (parkingId == null || parkingId.isEmpty) {
+            throw Exception('Parking ID is missing');
+          }
 
-            if (alreadyHasActiveSession) {
-              throw Exception(
-                'You already have an active parking session.',
-              );
-            }
+          final alreadyHasActiveSession =
+              await sessionController.hasActiveSession();
 
-            final pickupDateTime = _buildPickupDateTime(time);
+          if (alreadyHasActiveSession) {
+            throw Exception(
+              'You already have an active parking session.',
+            );
+          }
 
-            final session = await sessionController.startParking(
+          final pickupDateTime =
+              _buildPickupDateTime(time);
+
+          try {
+            final session =
+                await sessionController.startParking(
               parkingId: parkingId,
               pickupTime: pickupDateTime,
             );
 
-            if (!mounted) return;
+            await analyticsController.track(
+              eventType: 'parking_started',
+              screen: 'pickup_time',
+              parkingId: parkingId,
+              metadata: {
+                'pickup_time':
+                    pickupDateTime.toIso8601String(),
+              },
+            );
 
-            Navigator.pop(context);
+            if (!context.mounted) return;
+
+            Navigator.popUntil(
+              context,
+              (route) => route.isFirst,
+            );
 
             setState(() {
               currentIndex = 3;
@@ -256,11 +321,41 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             debugPrint(
               'Parking session created: ${session.id}',
             );
-          },
-        ),
+          } catch (error) {
+            if (!context.mounted) return;
+
+            final message = error.toString();
+
+            if (message.contains(
+              'NO_AVAILABLE_SPACES',
+            )) {
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'This parking lot has no available spaces.',
+                  ),
+                ),
+              );
+
+              return;
+            }
+
+            ScaffoldMessenger.of(context)
+                .showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Could not start parking: $error',
+                ),
+              ),
+            );
+          }
+        },
       ),
-    );
-  }
+    ),
+  );
+}
+          
   
   void openChangePickupTime() async {
     final session =
@@ -290,6 +385,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               pickupTime: newPickupTime,
             );
 
+            await analyticsController.track(
+              eventType: 'pickup_time_changed',
+              screen: 'change_pickup_time',
+              parkingId: session.parkingId,
+              metadata: {
+                'new_pickup_time': newPickupTime.toIso8601String(),
+              },
+            );
+
             if (!mounted) return;
 
           },
@@ -299,18 +403,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
   
   Future<void> endParking() async {
-    final session = await sessionController.loadActiveSession();
+    final session =
+        await sessionController.loadActiveSession();
 
-    if (session == null) {
-      return;
-    }
+    if (session == null) return;
 
     await sessionController.endParking(
       sessionId: session.id,
     );
 
+    await analyticsController.track(
+      eventType: 'parking_ended',
+      screen: 'end_parking',
+      parkingId: session.parkingId,
+    );
+
     if (!mounted) return;
 
+    setState(() {});
   }
 
   void openMyParking() {
@@ -369,6 +479,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               onRemove: (parking) async {
                 await favoriteController.removeFavorite(
                   parking.id,
+                );
+
+                await analyticsController.track(
+                  eventType: 'favorite_removed',
+                  screen: 'favorites',
+                  parkingId: parking.id,
                 );
 
                 if (!mounted) return;
