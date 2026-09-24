@@ -128,20 +128,13 @@ parkingController =
   }
 
   String _formatTimeForPicker(DateTime dateTime) {
-    final localTime = dateTime.toLocal();
+    final local = dateTime.toLocal();
 
-    int hour = localTime.hour;
-
-    if (hour >= 12) {
-      hour -= 12;
-    }
-
-    if (hour == 0) {
-      hour = 12;
-    }
+    final hour =
+        local.hour.toString().padLeft(2, '0');
 
     final minute =
-        localTime.minute.toString().padLeft(2, '0');
+        local.minute.toString().padLeft(2, '0');
 
     return '$hour:$minute';
   }
@@ -375,6 +368,12 @@ parkingController =
       return;
     }
 
+    final parking = await parkingController.loadParkingById(session.parkingId,);
+
+    if (parking == null) {
+      return;
+    }
+
     if (!mounted) return;
 
     final currentTime =
@@ -384,12 +383,16 @@ parkingController =
       context,
       MaterialPageRoute<void>(
         builder: (context) => ChangePickupTimeScreen(
-          initialTime: currentTime,
-          onNavTap: changePageFromPickup,
+          currentTime: _formatTimeForPicker(
+            session.pickupTime,
+          ),
+          openingTime:
+              parking.openingTime ?? '00:00:00',
+          closingTime:
+              parking.closingTime ?? '23:59:00',
           onSave: (time) async {
             final newPickupTime =
                 _buildPickupDateTime(time);
-
             await sessionController.changePickupTime(
               sessionId: session.id,
               pickupTime: newPickupTime,
@@ -405,6 +408,8 @@ parkingController =
             );
 
             if (!mounted) return;
+
+            setState((){})
 
           },
         ),
