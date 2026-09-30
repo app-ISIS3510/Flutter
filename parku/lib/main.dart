@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-
-import 'theme/app_theme.dart';
-import 'screens/main_navigation.dart';
-
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'screens/auth_gate.dart';
+import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,7 +28,7 @@ class ParkUApp extends StatelessWidget {
         scaffoldBackgroundColor: AppColors.background,
         fontFamily: 'Inter',
       ),
-      home: const MainNavigationScreen(),
+      home: const AuthGate(),
     );
   }
 }

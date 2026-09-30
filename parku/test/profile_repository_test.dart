@@ -8,22 +8,7 @@ import 'package:parku/models/vehicle.dart';
 import 'package:parku/repositories/user_repository.dart';
 import 'package:parku/repositories/session_repository.dart';
 
-class MemoryAuthStorage extends GotrueAsyncStorage {
-  final values = <String, String>{};
-
-  @override
-  Future<String?> getItem({required String key}) async => values[key];
-
-  @override
-  Future<void> setItem({required String key, required String value}) async {
-    values[key] = value;
-  }
-
-  @override
-  Future<void> removeItem({required String key}) async {
-    values.remove(key);
-  }
-}
+import 'support/memory_auth_storage.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
