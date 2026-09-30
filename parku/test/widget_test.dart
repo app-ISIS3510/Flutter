@@ -1,90 +1,106 @@
-import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:parku/main.dart';
+import 'package:parku/controllers/profile_controller.dart';
+import 'package:parku/screens/profile/profile_screen.dart';
+import 'package:parku/services/profile_service.dart';
+
+import 'support/fake_user_repository.dart';
 
 void main() {
-  setUpAll(() async {
-    TestWidgetsFlutterBinding.ensureInitialized();
-    final font = FontLoader('Inter')
-      ..addFont(rootBundle.load('assets/fonts/Inter.ttf'));
-    await font.load();
-  });
   testWidgets(
-    'Favorites can be removed and the empty state opens parking lots',
+    'Flow 3 edits the profile, validates plates and manages saved vehicles',
     (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(const ParkUApp());
-      await tester.tap(find.text('Favorites'));
+      final repository = FakeUserRepository();
+      final controller = ProfileController(ProfileService(repository));
+      addTearDown(controller.dispose);
+      int? nav;
+      bool parkingOpened = false;
+      bool signedOut = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProfileScreen(
+            controller: controller,
+            onNavTap: (value) => nav = value,
+            onMyParking: () => parkingOpened = true,
+            onSignedOut: () => signedOut = true,
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
-      expect(find.text('Remove'), findsNWidgets(4));
-      for (int i = 0; i < 4; i++) {
-        await tester.tap(find.text('Remove').first);
-        await tester.pumpAndSettle();
-      }
-      expect(find.text('Your favorites start here'), findsOneWidget);
-      await tester.tap(find.text('Explore parking lots'));
+      expect(find.text('Alex Rivera'), findsOneWidget);
+      await tester.tap(find.text('Edit profile'));
       await tester.pumpAndSettle();
-      expect(find.text('Find a place to park'), findsOneWidget);
-      await tester.tap(find.text('Favorites'));
+      await tester.enterText(find.byType(TextFormField).first, 'Juan Rivera');
+      await tester.tap(find.text('Save changes'));
       await tester.pumpAndSettle();
-      expect(find.text('Your favorites start here'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets(
-    'Pickup time saves, cancels edits, and supports bottom navigation',
-    (tester) async {
-      tester.view.physicalSize = const Size(390, 844);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(const ParkUApp());
-      await tester.tap(find.text('Parking lots'));
+      expect(find.text('Juan Rivera'), findsOneWidget);
+      await tester.tap(find.text('My vehicles'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('City U Parking'));
+      expect(find.text('Add your first vehicle'), findsOneWidget);
+      await tester.tap(find.text('Add vehicle'));
       await tester.pumpAndSettle();
-      expect(find.text('When will you pick it up?'), findsOneWidget);
-      await tester.tap(find.text('3:30'));
       await tester.pump();
-      expect(find.text('3:30 PM'), findsOneWidget);
-      await tester.ensureVisible(find.text('Start parking'));
-      await tester.tap(find.text('Start parking'));
+      await tester.ensureVisible(find.text('Save vehicle'));
+      await tester.tap(find.text('Save vehicle'));
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('3:30 PM', findRichText: true),
+        find.text('Enter a complete license plate to continue.'),
         findsOneWidget,
       );
-      await tester.ensureVisible(find.text('Change pickup time'));
-      await tester.tap(find.text('Change pickup time'));
+      expect(repository.addCalls, 0);
+      await tester.enterText(find.byType(TextFormField), 'abc123');
+      await tester.pump();
+      await tester.ensureVisible(find.text('Save vehicle'));
+      await tester.tap(find.text('Save vehicle'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('4:30'));
-      await tester.tap(find.text('Save pickup time'));
+      expect(find.text('ABC123'), findsOneWidget);
+      await tester.tap(find.text('Add vehicle'));
       await tester.pumpAndSettle();
-      expect(
-        find.textContaining('4:30 PM', findRichText: true),
-        findsOneWidget,
-      );
-      await tester.ensureVisible(find.text('Change pickup time'));
-      await tester.tap(find.text('Change pickup time'));
+      await tester.tap(find.text('Motorcycle'));
+      await tester.enterText(find.byType(TextFormField), 'xyz45d');
+      await tester.pump();
+      await tester.ensureVisible(find.text('Save vehicle'));
+      await tester.tap(find.text('Save vehicle'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('4:00'));
-      await tester.tap(find.text('Back to my parking'));
+      await tester.tap(find.text('Use vehicle').last);
       await tester.pumpAndSettle();
-      expect(
-        find.textContaining('4:30 PM', findRichText: true),
-        findsOneWidget,
-      );
-      await tester.ensureVisible(find.text('Change pickup time'));
-      await tester.tap(find.text('Change pickup time'));
+      expect(controller.selectedVehicle?.plate, 'XYZ45D');
+      await tester.tap(find.text('Delete').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Favorites'));
+      await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
       await tester.pumpAndSettle();
-      expect(find.text('Remove'), findsNWidgets(4));
-      expect(find.text('Need more time?'), findsNothing);
+      expect(find.text('XYZ45D'), findsNothing);
+      expect(controller.selectedVehicle?.plate, 'ABC123');
+      await tester.tap(find.text('Check driving restrictions'));
+      await tester.pumpAndSettle();
+      expect(find.text('View official information'), findsOneWidget);
+      await tester.tap(find.text('Change vehicle'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use vehicle'));
+      await tester.pumpAndSettle();
+      expect(find.text('Driving restrictions'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Delete').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Add your first vehicle'), findsOneWidget);
+      await tester.tap(find.text('Back to profile'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('My parking'));
+      expect(parkingOpened, true);
+      await tester.tap(find.text('My favorites'));
+      expect(nav, 2);
+      await tester.ensureVisible(find.text('Sign out'));
+      await tester.tap(find.text('Sign out'));
+      await tester.pumpAndSettle();
+      expect(signedOut, true);
+      expect(controller.profile, isNull);
       expect(tester.takeException(), isNull);
     },
   );

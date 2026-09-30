@@ -6,97 +6,103 @@ import 'package:parku/screens/change_pickup_time.dart';
 import 'package:parku/screens/favorites.dart';
 import 'package:parku/screens/no_favorites.dart';
 import 'package:parku/theme/app_theme.dart';
+import 'package:parku/models/parking.dart';
+import 'package:parku/models/vehicle.dart';
 
 void main() {
-  testWidgets(
-    'Render the four MS7 screens at Figma size and a small phone',
-    (tester) async {
-      final loader = FontLoader('Inter')
-        ..addFont(rootBundle.load('assets/fonts/Inter.ttf'));
+  testWidgets('Render the four MS7 screens at Figma size and a small phone', (
+    tester,
+  ) async {
+    final loader = FontLoader('Inter')
+      ..addFont(rootBundle.load('assets/fonts/Inter.ttf'));
 
-      await loader.load();
+    await loader.load();
 
-      tester.view.devicePixelRatio = 1;
+    tester.view.devicePixelRatio = 1;
 
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
 
-      final screens = <String, Widget>{
-        'pickup_time': PickupTimeScreen(
-          onNavTap: (_) {},
-          onStartParking: (_) {},
+    final screens = <String, Widget>{
+      'pickup_time': PickupTimeScreen(
+        onNavTap: (_) {},
+        onStartParking: (_, _) async {},
+        openingTime: '00:00',
+        closingTime: '23:59',
+        vehicle: const Vehicle(
+          id: 'car',
+          type: VehicleType.car,
+          plate: 'ABC123',
+          isSelected: true,
         ),
-        'change_pickup_time': ChangePickupTimeScreen(
-          onNavTap: (_) {},
-          onSave: (_) {},
-        ),
-        'favorites': FavoritesScreen(
-          onNavTap: (_) {},
-          onRemove: (_) {},
-          onSelectParking: (_) {},
-          favorites: const [
-            {
-              'name': 'City U Parking',
-              'address': 'Calle 20 · Las Aguas, Bogotá',
-            },
-            {
-              'name': 'MetroPark Center',
-              'address': '45 Market St',
-            },
-            {
-              'name': 'University Lot C',
-              'address': '102 Campus Drive',
-            },
-            {
-              'name': 'Library Underground',
-              'address': '250 Civic Center',
-            },
-          ],
-        ),
-        'no_favorites': NoFavoritesScreen(
-          onNavTap: (_) {},
-        ),
-      };
+        onChangeVehicle: () async => null,
+      ),
+      'change_pickup_time': ChangePickupTimeScreen(
+        onNavTap: (_) {},
+        onSave: (_) async {},
+        initialTime: '16:00',
+        openingTime: '00:00',
+        closingTime: '23:59',
+      ),
+      'favorites': FavoritesScreen(
+        onNavTap: (_) {},
+        onRemove: (_) {},
+        onSelectParking: (_) {},
+        favorites: [
+          Parking.fromMap({
+            'id': 'test',
+            'name': 'City U Parking',
+            'address': 'Calle 20 · Las Aguas, Bogotá',
+          }),
+          Parking.fromMap({
+            'id': 'test',
+            'name': 'MetroPark Center',
+            'address': '45 Market St',
+          }),
+          Parking.fromMap({
+            'id': 'test',
+            'name': 'University Lot C',
+            'address': '102 Campus Drive',
+          }),
+          Parking.fromMap({
+            'id': 'test',
+            'name': 'Library Underground',
+            'address': '250 Civic Center',
+          }),
+        ],
+      ),
+      'no_favorites': NoFavoritesScreen(onNavTap: (_) {}),
+    };
 
-      for (final size in [
-        const Size(390, 844),
-        const Size(320, 568),
-      ]) {
-        tester.view.physicalSize = size;
+    for (final size in [const Size(390, 844), const Size(320, 568)]) {
+      tester.view.physicalSize = size;
 
-        for (final entry in screens.entries) {
-          await tester.pumpWidget(
-            MaterialApp(
-              debugShowCheckedModeBanner: false,
-              theme: ThemeData(
-                useMaterial3: true,
-                fontFamily: 'Inter',
-                scaffoldBackgroundColor: AppColors.background,
+      for (final entry in screens.entries) {
+        await tester.pumpWidget(
+          MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: ThemeData(
+              useMaterial3: true,
+              fontFamily: 'Inter',
+              scaffoldBackgroundColor: AppColors.background,
+            ),
+            home: MediaQuery(
+              data: MediaQueryData(
+                size: size,
+                padding: const EdgeInsets.only(top: 30, bottom: 14),
               ),
-              home: MediaQuery(
-                data: MediaQueryData(
-                  size: size,
-                  padding: const EdgeInsets.only(
-                    top: 30,
-                    bottom: 14,
-                  ),
-                ),
-                child: RepaintBoundary(
-                  key: const ValueKey('screen'),
-                  child: entry.value,
-                ),
+              child: RepaintBoundary(
+                key: const ValueKey('screen'),
+                child: entry.value,
               ),
             ),
-          );
+          ),
+        );
 
-          await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
 
-          expect(
-            tester.takeException(),
-            isNull,
-          );
-        }
+        expect(tester.takeException(), isNull);
       }
-    },
-  );
+    }
+  });
 }

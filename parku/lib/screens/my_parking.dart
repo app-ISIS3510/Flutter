@@ -28,7 +28,6 @@ class MyParkingScreen extends StatefulWidget {
     required this.parking,
     required this.navigationController,
     this.onChangePickupTime,
-
   });
 
   @override
@@ -46,16 +45,13 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
 
     _updateRemainingTime();
 
-    _timer = Timer.periodic(
-      const Duration(seconds: 1),
-      (_) {
-        if (mounted) {
-          setState(() {
-            _updateRemainingTime();
-          });
-        }
-      },
-    );
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {
+          _updateRemainingTime();
+        });
+      }
+    });
   }
 
   Future<void> _openWaze() async {
@@ -64,9 +60,7 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
 
     if (latitude == null || longitude == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Parking location is not available.'),
-        ),
+        const SnackBar(content: Text('Parking location is not available.')),
       );
       return;
     }
@@ -79,11 +73,8 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
     } catch (error) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not open Waze: $error'),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Could not open Waze: $error')));
     }
   }
 
@@ -93,9 +84,7 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
 
     if (latitude == null || longitude == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Parking location is not available.'),
-        ),
+        const SnackBar(content: Text('Parking location is not available.')),
       );
       return;
     }
@@ -109,9 +98,7 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not open Google Maps: $error'),
-        ),
+        SnackBar(content: Text('Could not open Google Maps: $error')),
       );
     }
   }
@@ -172,12 +159,7 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
           children: [
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(
-                  30,
-                  22,
-                  30,
-                  20,
-                ),
+                padding: const EdgeInsets.fromLTRB(30, 22, 30, 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -290,7 +272,7 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                                                borderRadius: BorderRadius.circular(24),
+                        borderRadius: BorderRadius.circular(24),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -306,11 +288,12 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
 
                           const SizedBox(height: 10),
 
-                          // Temporal hasta conectar vehículos reales
-                          const Row(
+                          Row(
                             children: [
                               Text(
-                                'Car',
+                                widget.session.vehicleType == 'motorcycle'
+                                    ? 'Motorcycle'
+                                    : 'Car',
                                 style: TextStyle(
                                   fontSize: 16,
                                   color: AppColors.greyText,
@@ -318,7 +301,8 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                               ),
                               SizedBox(width: 12),
                               Text(
-                                'ABC123',
+                                widget.session.vehiclePlate ??
+                                    'Plate not recorded',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
@@ -348,7 +332,7 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                                   onPressed: _openGoogleMaps,
                                 ),
                               ),
-                              
+
                               const SizedBox(width: 12),
 
                               Expanded(
@@ -377,7 +361,7 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                           foregroundColor: AppColors.primary,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
-                                                    ),
+                          ),
                         ),
                         child: const Text(
                           'Change pickup time',
@@ -403,8 +387,7 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                               builder: (context) => EndParkingScreen(
                                 currentIndex: widget.currentIndex,
                                 onNavTap: widget.onNavTap,
-                                onConfirmEndParking:
-                                    widget.onEndParking,
+                                onConfirmEndParking: widget.onEndParking,
                               ),
                             ),
                           );
@@ -431,10 +414,7 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
               ),
             ),
 
-            NavBar(
-              currentIndex: widget.currentIndex,
-              onTap: widget.onNavTap,
-            ),
+            NavBar(currentIndex: widget.currentIndex, onTap: widget.onNavTap),
           ],
         ),
       ),
@@ -446,10 +426,7 @@ class _SecondaryButton extends StatelessWidget {
   final String text;
   final VoidCallback onPressed;
 
-  const _SecondaryButton({
-    required this.text,
-    required this.onPressed,
-  });
+  const _SecondaryButton({required this.text, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -467,14 +444,9 @@ class _SecondaryButton extends StatelessWidget {
         ),
         child: Text(
           text,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
     );
   }
 }
-                       
-                       
