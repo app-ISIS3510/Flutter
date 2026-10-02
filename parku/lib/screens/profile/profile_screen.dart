@@ -12,11 +12,13 @@ class ProfileScreen extends StatefulWidget {
   final ValueChanged<int> onNavTap;
   final VoidCallback onMyParking;
   final VoidCallback onSignedOut;
+  final VoidCallback onAnalyticsDashboard;
   const ProfileScreen({
     super.key,
     required this.controller,
     required this.onNavTap,
     required this.onMyParking,
+    required this.onAnalyticsDashboard,
     required this.onSignedOut,
   });
   @override
@@ -27,7 +29,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    widget.controller.load();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await widget.controller.load();
+
+      if (!mounted) return;
+
+      setState(() {});
+    });
   }
 
   void _open(Widget screen) {
@@ -169,6 +178,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       () => widget.onNavTap(2),
                     ),
                     const SizedBox(height: 16),
+
+                    if (controller.isAdmin) ...[
+                      _menu(
+                        'profile_clock',
+                        'Analytics dashboard',
+                        'View ParkU business metrics',
+                        widget.onAnalyticsDashboard,
+                      ),
+
+                      const SizedBox(height: 16),
+                    ],
                     Text(
                       'Everything you need to get to campus and back.',
                       style: profileText(13, color: AppColors.greyText),

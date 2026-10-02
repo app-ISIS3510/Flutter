@@ -34,6 +34,7 @@ class ProfileService {
   }
 
   Future<UserProfile> getProfile() => repository.getProfile();
+  Future<bool> isAdmin() => repository.isAdmin();
   Future<List<Vehicle>> getVehicles() => repository.getVehicles();
   Future<UserProfile> updateProfile(String name, String email) {
     final error = validateName(name) ?? validateEmail(email);

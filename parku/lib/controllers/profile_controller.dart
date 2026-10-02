@@ -13,6 +13,7 @@ class ProfileController extends ChangeNotifier {
   UserProfile? profile;
   List<Vehicle> vehicles = [];
   bool loading = false;
+  bool isAdmin = false;
   bool busy = false;
   String? error;
   int _version = 0;
@@ -49,6 +50,7 @@ class ProfileController extends ChangeNotifier {
     error = null;
     loading = false;
     busy = false;
+    isAdmin = false;
     _notify();
   }
 
@@ -62,6 +64,9 @@ class ProfileController extends ChangeNotifier {
       final user = await service.getProfile();
       if (version != _version) return;
       profile = user;
+      final adminStatus = await service.isAdmin();
+      if (version != _version) return;
+      isAdmin = adminStatus;
       final savedVehicles = await service.getVehicles();
       if (version != _version) return;
       vehicles = savedVehicles;

@@ -158,7 +158,7 @@ class _AnalyticsDashboardScreenState
                       ),
                       
                       _KpiCard(
-                        title: 'Favorite additions',
+                        title: 'Users with favorites',
                         value: totalFavorites.toString(),
                         subtitle: 'Last 7 days',
                       ),
@@ -194,7 +194,7 @@ class _AnalyticsDashboardScreenState
 
                   _DashboardCard(
                     title:
-                        'BQ4 · Favorite additions',
+                        'BQ4 · Users who added favorites',
                     child: _Bq4Content(data: bq4),
                   ),
 
@@ -641,7 +641,7 @@ class _Bq4Content extends StatelessWidget {
           const SizedBox(height: 6),
 
           const Text(
-            'Favorite additions',
+            'Users who added a favorite',
             style: TextStyle(
               fontSize: 15,
               color: AppColors.darkText,

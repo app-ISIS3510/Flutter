@@ -27,55 +27,49 @@ class SessionController {
   final SessionService service;
   final SessionState sessionState;
 
-  SessionController(
-    this.service,
-    this.sessionState,
-  );
-
-  Future<ParkingSession?> loadActiveSession() async {
-    final session =
-        await service.getActiveSession();
-
-    sessionState.setActiveSession(session);
-
-    return session;
-  }
+  SessionController(this.service, this.sessionState);
 
   Future<ParkingSession> startParking({
     required String parkingId,
     required DateTime pickupTime,
     required String vehicleId,
-  }) {
-    return service.startParking(
+  }) async {
+    final session = await service.startParking(
       parkingId: parkingId,
       pickupTime: pickupTime,
       vehicleId: vehicleId,
     );
 
     sessionState.setActiveSession(session);
-
     return session;
   }
 
-  Future<void> changePickupTime({
+  Future<ParkingSession?> loadActiveSession() async {
+    final session = await service.getActiveSession();
+    sessionState.setActiveSession(session);
+    return session;
+  }
+
+  Future<ParkingSession> changePickupTime({
     required String sessionId,
     required DateTime pickupTime,
   }) async {
-    await service.changePickupTime(
+    final session = await service.changePickupTime(
       sessionId: sessionId,
       pickupTime: pickupTime,
     );
+
+    sessionState.setActiveSession(session);
+    return session;
   }
 
-  Future<ParkingSession> endParking({
-    required String sessionId,
-  }) {
-    return service.endParking(
-      sessionId: sessionId,
-    );
+  Future<ParkingSession> endParking({required String sessionId}) async {
+    final session = await service.endParking(sessionId: sessionId);
+    sessionState.clearSession();
+    return session;
   }
 
-  Future<bool> hasActiveSession() async {
-  return await service.hasActiveSession();
-}
+  Future<bool> hasActiveSession() {
+    return service.hasActiveSession();
+  }
 }

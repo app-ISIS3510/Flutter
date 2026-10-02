@@ -10,6 +10,7 @@ abstract class UserRepository {
   Future<void> addVehicle(VehicleType type, String plate);
   Future<void> selectVehicle(String id);
   Future<void> deleteVehicle(String id);
+  Future<bool> isAdmin();
   Future<void> signOut();
 }
 
@@ -31,6 +32,17 @@ class SupabaseUserRepository implements UserRepository {
     email: user.email ?? '',
     pendingEmail: user.newEmail,
   );
+
+  @override
+  Future<bool> isAdmin() async {
+    final response = await client
+        .from('app_admins')
+        .select('user_id')
+        .eq('user_id', _userId)
+        .maybeSingle();
+
+    return response != null;
+  }
 
   @override
   Future<UserProfile> getProfile() async {
