@@ -34,6 +34,7 @@ import 'search_results.dart';
 import 'parking_detail.dart';
 import '../models/parking.dart';
 import '../models/parking_session.dart';
+import '../state/session_state.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -62,8 +63,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   late final DashboardService dashboardService;
   late final DashboardController dashboardController;
   late final DistanceManager distanceManager;
+  late SessionState sessionState;
 
   int currentIndex = 0;
+  bool isLoadingSession = false;
 
   DateTime _buildPickupDateTime(String time) {
     final parts = time.split(':');
@@ -99,7 +102,6 @@ parkingController =
     ParkingController(parkingService);
     sessionRepository = SessionRepository(supabase);
     sessionService = SessionService(sessionRepository);
-    sessionController = SessionController(sessionService);
     favoriteRepository = FavoriteRepository(supabase);
     favoriteService = FavoriteService(favoriteRepository);
     favoriteController = FavoriteController(favoriteService);
@@ -111,6 +113,8 @@ parkingController =
     dashboardRepository = DashboardRepository(supabase);
     dashboardService = DashboardService(dashboardRepository);
     dashboardController = DashboardController(dashboardService);
+    sessionState = SessionState();
+    sessionController = SessionController(sessionService, sessionState,);
   }
 
   void openAnalyticsDashboard() {
@@ -139,12 +143,30 @@ parkingController =
     return '$hour:$minute';
   }
 
-  void changePage(int index) {
+  Future<void> changePage(int index) async {
+    if (index == 3) {
+      setState(() {
+        isLoadingSession = true;
+        currentIndex = index;
+      });
+
+      try {
+        await sessionController.loadActiveSession();
+      } finally {
+        if (mounted) {
+          setState(() {
+            isLoadingSession = false;
+          });
+        }
+      }
+
+      return;
+    }
+
     setState(() {
       currentIndex = index;
     });
   }
-
 
   void openSearch() {
     Navigator.push(
@@ -376,20 +398,19 @@ parkingController =
 
     if (!mounted) return;
 
-    final currentTime =
-        _formatTimeForPicker(session.pickupTime);
 
     Navigator.push(
       context,
       MaterialPageRoute<void>(
         builder: (context) => ChangePickupTimeScreen(
-          currentTime: _formatTimeForPicker(
+          initialTime: _formatTimeForPicker(
             session.pickupTime,
           ),
           openingTime:
               parking.openingTime ?? '00:00:00',
           closingTime:
               parking.closingTime ?? '23:59:00',
+          onNavTap: changePageFromPickup,
           onSave: (time) async {
             final newPickupTime =
                 _buildPickupDateTime(time);
@@ -407,10 +428,6 @@ parkingController =
               },
             );
 
-            if (!mounted) return;
-
-            setState((){})
-
           },
         ),
       ),
@@ -424,7 +441,7 @@ parkingController =
     if (session == null) return;
 
     await sessionController.endParking(
-      sessionId: session.id,
+      session.id,
     );
 
     await analyticsController.track(
@@ -433,9 +450,6 @@ parkingController =
       parkingId: session.parkingId,
     );
 
-    if (!mounted) return;
-
-    setState(() {});
   }
 
   void openMyParking() {
@@ -511,31 +525,18 @@ parkingController =
         );
 
       case 3:
-        return FutureBuilder<ParkingSession?>(
-          future: sessionController.loadActiveSession(),
-          builder: (context, sessionSnapshot) {
-            if (sessionSnapshot.connectionState ==
-                ConnectionState.waiting) {
-              return const Scaffold(
-                body: Center(
-                  child: CircularProgressIndicator(),
-                ),
-              );
-            }
+        if (isLoadingSession) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
 
-            if (sessionSnapshot.hasError) {
-              return Scaffold(
-                body: Center(
-                  child: Text(
-                    'Error loading parking session:\n'
-                    '${sessionSnapshot.error}',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              );
-            }
-
-            final session = sessionSnapshot.data;
+        return ListenableBuilder(
+          listenable: sessionState,
+          builder: (context, child) {
+            final session = sessionState.activeSession;
 
             if (session == null) {
               return NoActiveParkingScreen(
@@ -587,9 +588,11 @@ parkingController =
                   onNavTap: changePage,
                   session: session,
                   parking: parking,
-                  navigationController: navigationController,
+                  navigationController:
+                      navigationController,
                   onEndParking: endParking,
-                  onChangePickupTime: openChangePickupTime,
+                  onChangePickupTime:
+                      openChangePickupTime,
                 );
               },
             );
