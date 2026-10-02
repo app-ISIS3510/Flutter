@@ -9,10 +9,12 @@ class SessionService {
   Future<ParkingSession> startParking({
     required String parkingId,
     required DateTime pickupTime,
+    required String vehicleId,
   }) {
     return repository.createSession(
       parkingId: parkingId,
       pickupTime: pickupTime,
+      vehicleId: vehicleId,
     );
   }
 
@@ -30,16 +32,11 @@ class SessionService {
     );
   }
 
-  Future<ParkingSession> endParking({
-    required String sessionId,
-  }) {
-    return repository.endSession(
-      sessionId: sessionId,
-    );
+  Future<ParkingSession> endParking({required String sessionId}) {
+    return repository.endSession(sessionId: sessionId);
   }
 
   Future<bool> hasActiveSession() {
     return repository.hasActiveSession();
   }
-  
 }

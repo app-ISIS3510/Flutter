@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -34,14 +36,19 @@ import 'search_results.dart';
 import 'parking_detail.dart';
 import '../models/parking.dart';
 import '../models/parking_session.dart';
-import '../state/session_state.dart';
+import '../models/vehicle.dart';
+import '../controllers/profile_controller.dart';
+import '../repositories/user_repository.dart';
+import '../services/profile_service.dart';
+import 'profile/profile_screen.dart';
+import 'profile/vehicles_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
-  const MainNavigationScreen({super.key});
+  final VoidCallback? onSignedOut;
+  const MainNavigationScreen({super.key, this.onSignedOut});
 
   @override
-  State<MainNavigationScreen> createState() =>
-      _MainNavigationScreenState();
+  State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
@@ -66,7 +73,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   late SessionState sessionState;
 
   int currentIndex = 0;
-  bool isLoadingSession = false;
 
   DateTime _buildPickupDateTime(String time) {
     final parts = time.split(':');
@@ -76,13 +82,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     final now = DateTime.now();
 
-    return DateTime(
-      now.year,
-      now.month,
-      now.day,
-      hour,
-      minute,
-    );
+    return DateTime(now.year, now.month, now.day, hour, minute);
   }
 
   @override
@@ -93,13 +93,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     parkingRepository = ParkingRepository(supabase);
     distanceManager = DistanceManager();
-    parkingService = ParkingService(
-        parkingRepository,
-        distanceManager,
-      );
+    parkingService = ParkingService(parkingRepository, distanceManager);
 
-parkingController =
-    ParkingController(parkingService);
+    parkingController = ParkingController(parkingService);
     sessionRepository = SessionRepository(supabase);
     sessionService = SessionService(sessionRepository);
     favoriteRepository = FavoriteRepository(supabase);
@@ -113,8 +109,6 @@ parkingController =
     dashboardRepository = DashboardRepository(supabase);
     dashboardService = DashboardService(dashboardRepository);
     dashboardController = DashboardController(dashboardService);
-    sessionState = SessionState();
-    sessionController = SessionController(sessionService, sessionState,);
   }
 
   void openAnalyticsDashboard() {
@@ -123,8 +117,7 @@ parkingController =
       MaterialPageRoute<void>(
         builder: (context) {
           return AnalyticsDashboardScreen(
-            dashboardController:
-                dashboardController,
+            dashboardController: dashboardController,
           );
         },
       ),
@@ -134,11 +127,9 @@ parkingController =
   String _formatTimeForPicker(DateTime dateTime) {
     final local = dateTime.toLocal();
 
-    final hour =
-        local.hour.toString().padLeft(2, '0');
+    final hour = local.hour.toString().padLeft(2, '0');
 
-    final minute =
-        local.minute.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
 
     return '$hour:$minute';
   }
@@ -165,6 +156,7 @@ parkingController =
 
     setState(() {
       currentIndex = index;
+      showingMyParking = false;
     });
   }
 
@@ -188,10 +180,7 @@ parkingController =
                   currentIndex: 1,
                   parkingController: parkingController,
                   onNavTap: (index) {
-                    Navigator.popUntil(
-                      context,
-                      (route) => route.isFirst,
-                    );
+                    _returnToMain();
 
                     changePage(index);
                   },
@@ -218,8 +207,7 @@ parkingController =
       parkingId: parkingId,
     );
 
-    bool isFavorite =
-        await favoriteController.isFavorite(parkingId);
+    bool isFavorite = await favoriteController.isFavorite(parkingId);
 
     if (!mounted) return;
 
@@ -237,32 +225,35 @@ parkingController =
                 analyticsController: analyticsController,
 
                 onToggleFavorite: () async {
-                  final wasFavorite = isFavorite;
-
-                  await favoriteController.toggleFavorite(
-                    parkingId,
-                  );
-
-                  isFavorite = await favoriteController.isFavorite(
-                    parkingId,
-                  );
-
-                  await analyticsController.track(
-                    eventType: wasFavorite
-                        ? 'favorite_removed'
-                        : 'favorite_added',
-                    screen: 'parking_detail',
-                    parkingId: parkingId,
-                  );
-
-                  refreshDetail(() {});
+                  try {
+                    final wasFavorite = isFavorite;
+                    await favoriteController.toggleFavorite(parkingId);
+                    isFavorite = await favoriteController.isFavorite(parkingId);
+                    if (!context.mounted) return;
+                    refreshDetail(() {});
+                    unawaited(
+                      analyticsController
+                          .track(
+                            eventType: wasFavorite
+                                ? 'favorite_removed'
+                                : 'favorite_added',
+                            screen: 'parking_detail',
+                            parkingId: parkingId,
+                          )
+                          .catchError((Object _) {}),
+                    );
+                  } catch (error) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(ProfileController.messageFor(error)),
+                      ),
+                    );
+                  }
                 },
 
                 onNavTap: (index) {
-                  Navigator.popUntil(
-                    context,
-                    (route) => route.isFirst,
-                  );
+                  _returnToMain();
 
                   changePage(index);
                 },
@@ -283,114 +274,66 @@ parkingController =
     changePage(index);
   }
 
-  void openPickupTime(Map<String, String> parking) {
-  Navigator.push(
-    context,
-    MaterialPageRoute<void>(
-      builder: (context) => PickupTimeScreen(
-          onNavTap: changePageFromPickup,
-
-          openingTime:
-              parking['openingTime'] ?? '00:00:00',
-
-          closingTime:
-              parking['closingTime'] ?? '23:59:00',
-
-          onStartParking: (time) async {
-          final parkingId = parking['id'];
-
-          if (parkingId == null || parkingId.isEmpty) {
-            throw Exception('Parking ID is missing');
-          }
-
-          final alreadyHasActiveSession =
-              await sessionController.hasActiveSession();
-
-          if (alreadyHasActiveSession) {
-            throw Exception(
-              'You already have an active parking session.',
-            );
-          }
-
-          final pickupDateTime =
-              _buildPickupDateTime(time);
-
-          try {
-            final session =
-                await sessionController.startParking(
+  Future<void> openPickupTime(Map<String, String> parking) async {
+    await profileController.load();
+    if (!mounted) return;
+    if (profileController.error != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(profileController.error!)));
+      return;
+    }
+    var vehicle = profileController.selectedVehicle;
+    vehicle ??= await _chooseVehicle();
+    if (vehicle == null || !mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (context) => PickupTimeScreen(
+          onNavTap: _profileNavTap,
+          vehicle: vehicle!,
+          onChangeVehicle: () async {
+            await _chooseVehicle();
+            return profileController.selectedVehicle;
+          },
+          openingTime: parking['openingTime'] ?? '00:00:00',
+          closingTime: parking['closingTime'] ?? '23:59:00',
+          onStartParking: (time, chosenVehicle) async {
+            final parkingId = parking['id'];
+            if (parkingId == null) throw Exception('Parking ID is missing');
+            final pickup = _buildPickupDateTime(time);
+            await sessionController.startParking(
               parkingId: parkingId,
-              pickupTime: pickupDateTime,
+              pickupTime: pickup,
+              vehicleId: chosenVehicle.id,
             );
-
-            await analyticsController.track(
-              eventType: 'parking_started',
-              screen: 'pickup_time',
-              parkingId: parkingId,
-              metadata: {
-                'pickup_time':
-                    pickupDateTime.toIso8601String(),
-              },
+            // El registro de estadísticas no debe impedir mostrar una sesión ya creada.
+            unawaited(
+              analyticsController
+                  .track(
+                    eventType: 'parking_started',
+                    screen: 'pickup_time',
+                    parkingId: parkingId,
+                    metadata: {'pickup_time': pickup.toIso8601String()},
+                  )
+                  .catchError((Object _) {}),
             );
-
             if (!context.mounted) return;
-
-            Navigator.popUntil(
-              context,
-              (route) => route.isFirst,
-            );
-
-            setState(() {
-              currentIndex = 3;
-            });
-
-            debugPrint(
-              'Parking session created: ${session.id}',
-            );
-          } catch (error) {
-            if (!context.mounted) return;
-
-            final message = error.toString();
-
-            if (message.contains(
-              'NO_AVAILABLE_SPACES',
-            )) {
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'This parking lot has no available spaces.',
-                  ),
-                ),
-              );
-
-              return;
-            }
-
-            ScaffoldMessenger.of(context)
-                .showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Could not start parking: $error',
-                ),
-              ),
-            );
-          }
-        },
+            _returnToMain();
+            openMyParking();
+          },
+        ),
       ),
-    ),
-  );
-}
-          
-  
+    );
+  }
+
   void openChangePickupTime() async {
-    final session =
-        await sessionController.loadActiveSession();
+    final session = await sessionController.loadActiveSession();
 
     if (session == null) {
       return;
     }
 
-    final parking = await parkingController.loadParkingById(session.parkingId,);
+    final parking = await parkingController.loadParkingById(session.parkingId);
 
     if (parking == null) {
       return;
@@ -398,22 +341,22 @@ parkingController =
 
     if (!mounted) return;
 
+    final currentTime =
+        _formatTimeForPicker(session.pickupTime);
 
     Navigator.push(
       context,
       MaterialPageRoute<void>(
         builder: (context) => ChangePickupTimeScreen(
-          initialTime: _formatTimeForPicker(
+          currentTime: _formatTimeForPicker(
             session.pickupTime,
           ),
           openingTime:
               parking.openingTime ?? '00:00:00',
           closingTime:
               parking.closingTime ?? '23:59:00',
-          onNavTap: changePageFromPickup,
           onSave: (time) async {
-            final newPickupTime =
-                _buildPickupDateTime(time);
+            final newPickupTime = _buildPickupDateTime(time);
             await sessionController.changePickupTime(
               sessionId: session.id,
               pickupTime: newPickupTime,
@@ -423,25 +366,26 @@ parkingController =
               eventType: 'pickup_time_changed',
               screen: 'change_pickup_time',
               parkingId: session.parkingId,
-              metadata: {
-                'new_pickup_time': newPickupTime.toIso8601String(),
-              },
+              metadata: {'new_pickup_time': newPickupTime.toIso8601String()},
             );
+
+            if (!mounted) return;
+
+            setState((){})
 
           },
         ),
       ),
     );
   }
-  
+
   Future<void> endParking() async {
-    final session =
-        await sessionController.loadActiveSession();
+    final session = await sessionController.loadActiveSession();
 
     if (session == null) return;
 
     await sessionController.endParking(
-      session.id,
+      sessionId: session.id,
     );
 
     await analyticsController.track(
@@ -453,7 +397,10 @@ parkingController =
   }
 
   void openMyParking() {
-    changePage(3);
+    setState(() {
+      currentIndex = 3;
+      showingMyParking = true;
+    });
   }
 
   @override
@@ -472,12 +419,9 @@ parkingController =
         return FutureBuilder<List<Parking>>(
           future: favoriteController.loadFavorites(),
           builder: (context, snapshot) {
-            if (snapshot.connectionState ==
-                ConnectionState.waiting) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(
-                body: Center(
-                  child: CircularProgressIndicator(),
-                ),
+                body: Center(child: CircularProgressIndicator()),
               );
             }
 
@@ -495,9 +439,7 @@ parkingController =
             final favorites = snapshot.data ?? [];
 
             if (favorites.isEmpty) {
-              return NoFavoritesScreen(
-                onNavTap: changePage,
-              );
+              return NoFavoritesScreen(onNavTap: changePage);
             }
 
             return FavoritesScreen(
@@ -506,9 +448,7 @@ parkingController =
               onSelectParking: openParkingDetail,
 
               onRemove: (parking) async {
-                await favoriteController.removeFavorite(
-                  parking.id,
-                );
+                await favoriteController.removeFavorite(parking.id);
 
                 await analyticsController.track(
                   eventType: 'favorite_removed',
@@ -525,13 +465,17 @@ parkingController =
         );
 
       case 3:
-        if (isLoadingSession) {
-          return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
-        }
+        return FutureBuilder<ParkingSession?>(
+          future: sessionController.loadActiveSession(),
+          builder: (context, sessionSnapshot) {
+            if (sessionSnapshot.connectionState ==
+                ConnectionState.waiting) {
+              return const Scaffold(
+                body: Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
 
         return ListenableBuilder(
           listenable: sessionState,
@@ -546,16 +490,12 @@ parkingController =
             }
 
             return FutureBuilder<Parking?>(
-              future: parkingController.loadParkingById(
-                session.parkingId,
-              ),
+              future: parkingController.loadParkingById(session.parkingId),
               builder: (context, parkingSnapshot) {
                 if (parkingSnapshot.connectionState ==
                     ConnectionState.waiting) {
                   return const Scaffold(
-                    body: Center(
-                      child: CircularProgressIndicator(),
-                    ),
+                    body: Center(child: CircularProgressIndicator()),
                   );
                 }
 
@@ -575,11 +515,7 @@ parkingController =
 
                 if (parking == null) {
                   return const Scaffold(
-                    body: Center(
-                      child: Text(
-                        'Parking lot not found.',
-                      ),
-                    ),
+                    body: Center(child: Text('Parking lot not found.')),
                   );
                 }
 

@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import '../models/vehicle.dart';
+import '../controllers/session_controller.dart';
 import '../widgets/design_icon.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/pickup_widgets.dart';
 
 class PickupTimeScreen extends StatefulWidget {
   final ValueChanged<int> onNavTap;
-  final Future<void> Function(String) onStartParking;
+  final Future<void> Function(String, Vehicle) onStartParking;
 
+  final Vehicle vehicle;
+  final Future<Vehicle?> Function() onChangeVehicle;
   final String openingTime;
   final String closingTime;
 
@@ -16,18 +20,19 @@ class PickupTimeScreen extends StatefulWidget {
     super.key,
     required this.onNavTap,
     required this.onStartParking,
+    required this.vehicle,
+    required this.onChangeVehicle,
     required this.openingTime,
     required this.closingTime,
   });
 
   @override
-  State<PickupTimeScreen> createState() =>
-      _PickupTimeScreenState();
+  State<PickupTimeScreen> createState() => _PickupTimeScreenState();
 }
 
-class _PickupTimeScreenState
-    extends State<PickupTimeScreen> {
+class _PickupTimeScreenState extends State<PickupTimeScreen> {
   String? selectedTime;
+  Vehicle? selectedVehicle;
 
   bool isStartingParking = false;
 
@@ -37,6 +42,7 @@ class _PickupTimeScreenState
   void initState() {
     super.initState();
 
+    selectedVehicle = widget.vehicle;
     availableTimes = _generateAvailableTimes();
 
     if (availableTimes.isNotEmpty) {
@@ -44,27 +50,16 @@ class _PickupTimeScreenState
     }
   }
 
-  DateTime _parseParkingTime(
-    String time,
-    DateTime day,
-  ) {
+  DateTime _parseParkingTime(String time, DateTime day) {
     final parts = time.split(':');
 
     final hour = int.parse(parts[0]);
     final minute = int.parse(parts[1]);
 
-    return DateTime(
-      day.year,
-      day.month,
-      day.day,
-      hour,
-      minute,
-    );
+    return DateTime(day.year, day.month, day.day, hour, minute);
   }
 
-  DateTime _roundToNext30Minutes(
-    DateTime dateTime,
-  ) {
+  DateTime _roundToNext30Minutes(DateTime dateTime) {
     if (dateTime.minute < 30) {
       return DateTime(
         dateTime.year,
@@ -87,14 +82,11 @@ class _PickupTimeScreenState
   List<String> _generateAvailableTimes() {
     final now = DateTime.now();
 
-    final opening =
-        _parseParkingTime(widget.openingTime, now);
+    final opening = _parseParkingTime(widget.openingTime, now);
 
-    final closing =
-        _parseParkingTime(widget.closingTime, now);
+    final closing = _parseParkingTime(widget.closingTime, now);
 
-    DateTime firstPossibleTime =
-        _roundToNext30Minutes(now);
+    DateTime firstPossibleTime = _roundToNext30Minutes(now);
 
     if (firstPossibleTime.isBefore(opening)) {
       firstPossibleTime = opening;
@@ -109,17 +101,13 @@ class _PickupTimeScreenState
     DateTime current = firstPossibleTime;
 
     while (!current.isAfter(closing)) {
-      final hour =
-          current.hour.toString().padLeft(2, '0');
+      final hour = current.hour.toString().padLeft(2, '0');
 
-      final minute =
-          current.minute.toString().padLeft(2, '0');
+      final minute = current.minute.toString().padLeft(2, '0');
 
       times.add('$hour:$minute');
 
-      current = current.add(
-        const Duration(minutes: 30),
-      );
+      current = current.add(const Duration(minutes: 30));
     }
 
     return times;
@@ -145,12 +133,12 @@ class _PickupTimeScreenState
   Future<void> _startParking() async {
     if (isStartingParking) return;
 
+    if (selectedVehicle == null) return;
+
     if (selectedTime == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'There are no available pickup times today.',
-          ),
+          content: Text('There are no available pickup times today.'),
         ),
       );
 
@@ -162,18 +150,12 @@ class _PickupTimeScreenState
     });
 
     try {
-      await widget.onStartParking(
-        selectedTime!,
-      );
+      await widget.onStartParking(selectedTime!, selectedVehicle!);
     } catch (error) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not start parking: $error',
-          ),
-        ),
+        SnackBar(content: Text(SessionController.messageFor(error))),
       );
     } finally {
       if (mounted) {
@@ -186,8 +168,7 @@ class _PickupTimeScreenState
 
   @override
   Widget build(BuildContext context) {
-    final hasAvailableTimes =
-        availableTimes.isNotEmpty;
+    final hasAvailableTimes = availableTimes.isNotEmpty;
 
     return Scaffold(
       body: SafeArea(
@@ -195,21 +176,13 @@ class _PickupTimeScreenState
           children: [
             Expanded(
               child: SingleChildScrollView(
-                padding:
-                    const EdgeInsets.fromLTRB(
-                  24,
-                  18,
-                  24,
-                  24,
-                ),
+                padding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     ScreenHeader(
                       title: 'Pickup time',
-                      onBack: () =>
-                          Navigator.pop(context),
+                      onBack: () => Navigator.pop(context),
                     ),
 
                     const SizedBox(height: 24),
@@ -219,10 +192,8 @@ class _PickupTimeScreenState
                       style: TextStyle(
                         fontSize: 25,
                         height: 1.35,
-                        fontWeight:
-                            FontWeight.w700,
-                        color:
-                            AppColors.darkText,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.darkText,
                       ),
                     ),
 
@@ -233,8 +204,7 @@ class _PickupTimeScreenState
                       style: TextStyle(
                         fontSize: 15,
                         height: 1.35,
-                        color:
-                            AppColors.greyText,
+                        color: AppColors.greyText,
                       ),
                     ),
 
@@ -242,77 +212,61 @@ class _PickupTimeScreenState
 
                     Container(
                       width: double.infinity,
-                      padding:
-                          const EdgeInsets.all(
-                        16,
-                      ),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: AppColors.white,
-                        borderRadius:
-                            BorderRadius.circular(
-                          20,
-                        ),
+                        borderRadius: BorderRadius.circular(20),
                       ),
                       child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Row(
+                          Row(
                             children: [
-                              DesignIcon('car'),
+                              selectedVehicle?.type != VehicleType.motorcycle
+                                  ? const DesignIcon('car')
+                                  : const Icon(
+                                      Icons.two_wheeler_outlined,
+                                      color: AppColors.primary,
+                                    ),
                               SizedBox(width: 10),
                               Text(
-                                'Car',
+                                selectedVehicle?.type.label ??
+                                    'No vehicle selected',
                                 style: TextStyle(
                                   fontSize: 16,
                                   height: 1.35,
-                                  fontWeight:
-                                      FontWeight
-                                          .w600,
-                                  color: AppColors
-                                      .darkText,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.darkText,
                                 ),
                               ),
                             ],
                           ),
 
-                          const SizedBox(
-                            height: 12,
-                          ),
+                          const SizedBox(height: 12),
 
-                          const Text(
-                            'ABC123',
+                          Text(
+                            selectedVehicle?.plate ??
+                                'Add a vehicle to continue.',
                             style: TextStyle(
                               fontSize: 22,
                               height: 1.35,
-                              fontWeight:
-                                  FontWeight.w700,
-                              color:
-                                  AppColors.darkText,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.darkText,
                             ),
                           ),
 
-                          const SizedBox(
-                            height: 12,
-                          ),
+                          const SizedBox(height: 12),
 
                           PickupButton(
-                            text:
-                                'Change vehicle',
-                            background:
-                                AppColors.white,
-                            foreground:
-                                AppColors.primary,
-                            onPressed: () {
-                              ScaffoldMessenger
-                                      .of(context)
-                                  .showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Demo vehicle: Car · ABC123',
-                                  ),
-                                ),
-                              );
+                            text: 'Change vehicle',
+                            background: AppColors.white,
+                            foreground: AppColors.primary,
+                            onPressed: () async {
+                              if (isStartingParking) return;
+                              final vehicle = await widget.onChangeVehicle();
+                              if (mounted) {
+                                setState(() => selectedVehicle = vehicle);
+                              }
                             },
                           ),
                         ],
@@ -326,10 +280,8 @@ class _PickupTimeScreenState
                       style: TextStyle(
                         fontSize: 14,
                         height: 1.35,
-                        fontWeight:
-                            FontWeight.w600,
-                        color:
-                            AppColors.darkText,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.darkText,
                       ),
                     ),
 
@@ -339,8 +291,7 @@ class _PickupTimeScreenState
                       'Parking closes at ${_formatTime(widget.closingTime.substring(0, 5))}',
                       style: const TextStyle(
                         fontSize: 12,
-                        color:
-                            AppColors.greyText,
+                        color: AppColors.greyText,
                       ),
                     ),
 
@@ -349,86 +300,45 @@ class _PickupTimeScreenState
                     if (hasAvailableTimes) ...[
                       Container(
                         width: double.infinity,
-                        padding:
-                            const EdgeInsets.all(
-                          16,
-                        ),
-                        decoration:
-                            BoxDecoration(
-                          color: AppColors
-                              .lightPurple,
-                          borderRadius:
-                              BorderRadius
-                                  .circular(
-                            20,
-                          ),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.lightPurple,
+                          borderRadius: BorderRadius.circular(20),
                         ),
                         child: Row(
                           children: [
-                            const DesignIcon(
-                              'clock',
-                              size: 28,
-                            ),
+                            const DesignIcon('clock', size: 28),
 
-                            const SizedBox(
-                              width: 12,
-                            ),
+                            const SizedBox(width: 12),
 
                             Expanded(
-                              child:
-                                  DropdownButtonHideUnderline(
-                                child:
-                                    DropdownButton<String>(
-                                  value:
-                                      selectedTime,
-                                  isExpanded:
-                                      true,
-                                  icon:
-                                      const Icon(
-                                    Icons
-                                        .keyboard_arrow_down,
-                                    color: AppColors
-                                        .primary,
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  value: selectedTime,
+                                  isExpanded: true,
+                                  icon: const Icon(
+                                    Icons.keyboard_arrow_down,
+                                    color: AppColors.primary,
                                   ),
-                                  style:
-                                      const TextStyle(
+                                  style: const TextStyle(
                                     fontSize: 26,
-                                    fontWeight:
-                                        FontWeight
-                                            .w700,
-                                    color: AppColors
-                                        .primary,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary,
                                   ),
-                                  items:
-                                      availableTimes
-                                          .map(
-                                    (time) {
-                                      return DropdownMenuItem<
-                                          String>(
-                                        value:
-                                            time,
-                                        child:
-                                            Text(
-                                          _formatTime(
-                                            time,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ).toList(),
-                                  onChanged:
-                                      (value) {
-                                    if (value ==
-                                        null) {
+                                  items: availableTimes.map((time) {
+                                    return DropdownMenuItem<String>(
+                                      value: time,
+                                      child: Text(_formatTime(time)),
+                                    );
+                                  }).toList(),
+                                  onChanged: (value) {
+                                    if (value == null) {
                                       return;
                                     }
 
-                                    setState(
-                                      () {
-                                        selectedTime =
-                                            value;
-                                      },
-                                    );
+                                    setState(() {
+                                      selectedTime = value;
+                                    });
                                   },
                                 ),
                               ),
@@ -439,45 +349,28 @@ class _PickupTimeScreenState
                     ] else ...[
                       Container(
                         width: double.infinity,
-                        padding:
-                            const EdgeInsets.all(
-                          18,
-                        ),
-                        decoration:
-                            BoxDecoration(
-                          color: AppColors
-                              .lightPurple,
-                          borderRadius:
-                              BorderRadius
-                                  .circular(
-                            20,
-                          ),
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: AppColors.lightPurple,
+                          borderRadius: BorderRadius.circular(20),
                         ),
                         child: const Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment
-                                  .start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               'No pickup times available',
                               style: TextStyle(
                                 fontSize: 18,
-                                fontWeight:
-                                    FontWeight
-                                        .w700,
-                                color: AppColors
-                                    .darkText,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.darkText,
                               ),
                             ),
-                            SizedBox(
-                              height: 6,
-                            ),
+                            SizedBox(height: 6),
                             Text(
                               'This parking lot is closing soon or has already closed for today.',
                               style: TextStyle(
                                 fontSize: 14,
-                                color: AppColors
-                                    .greyText,
+                                color: AppColors.greyText,
                               ),
                             ),
                           ],
@@ -493,9 +386,10 @@ class _PickupTimeScreenState
                           : 'Start parking',
                       onPressed:
                           !hasAvailableTimes ||
-                                  isStartingParking
-                              ? () {}
-                              : _startParking,
+                              isStartingParking ||
+                              selectedVehicle == null
+                          ? null
+                          : _startParking,
                     ),
 
                     const SizedBox(height: 16),
@@ -505,8 +399,7 @@ class _PickupTimeScreenState
                       style: TextStyle(
                         fontSize: 12,
                         height: 1.35,
-                        color:
-                            AppColors.greyText,
+                        color: AppColors.greyText,
                       ),
                     ),
                   ],
@@ -514,10 +407,7 @@ class _PickupTimeScreenState
               ),
             ),
 
-            NavBar(
-              currentIndex: 1,
-              onTap: widget.onNavTap,
-            ),
+            NavBar(currentIndex: 1, onTap: widget.onNavTap),
           ],
         ),
       ),

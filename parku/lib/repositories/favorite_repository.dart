@@ -6,28 +6,32 @@ class FavoriteRepository {
   final SupabaseClient client;
 
   FavoriteRepository(this.client);
+  String get _userId =>
+      client.auth.currentUser?.id ??
+      (throw const AuthException('Sign in to continue.'));
 
   Future<List<Parking>> getFavorites() async {
+    if (client.auth.currentUser == null) return [];
     final response = await client
         .from('favorites')
         .select('parking_lots(*)')
+        .eq('user_id', _userId)
         .order('created_at', ascending: false);
 
-    return (response as List<dynamic>)
-        .map((item) {
-          final parkingData =
-              item['parking_lots'] as Map<String, dynamic>;
+    return (response as List<dynamic>).map((item) {
+      final parkingData = item['parking_lots'] as Map<String, dynamic>;
 
-          return Parking.fromMap(parkingData);
-        })
-        .toList();
+      return Parking.fromMap(parkingData);
+    }).toList();
   }
 
   Future<bool> isFavorite(String parkingId) async {
+    if (client.auth.currentUser == null) return false;
     final response = await client
         .from('favorites')
         .select('id')
         .eq('parking_id', parkingId)
+        .eq('user_id', _userId)
         .limit(1);
 
     return response.isNotEmpty;
@@ -42,6 +46,7 @@ class FavoriteRepository {
 
     await client.from('favorites').insert({
       'parking_id': parkingId,
+      'user_id': _userId,
     });
   }
 
@@ -49,7 +54,8 @@ class FavoriteRepository {
     await client
         .from('favorites')
         .delete()
-        .eq('parking_id', parkingId);
+        .eq('parking_id', parkingId)
+        .eq('user_id', _userId);
   }
 
   Future<void> toggleFavorite(String parkingId) async {

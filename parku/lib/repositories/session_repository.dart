@@ -6,32 +6,35 @@ class SessionRepository {
   final SupabaseClient client;
 
   SessionRepository(this.client);
+  String get _userId =>
+      client.auth.currentUser?.id ??
+      (throw const AuthException('Sign in to continue.'));
 
   Future<ParkingSession> createSession({
     required String parkingId,
     required DateTime pickupTime,
-    String vehicleType = 'car',
+    required String vehicleId,
   }) async {
+    _userId;
     final response = await client.rpc(
-      'start_parking_session',
+      'start_parking_with_vehicle',
       params: {
         'p_parking_id': parkingId,
-        'p_pickup_time':
-            pickupTime.toUtc().toIso8601String(),
-        'p_vehicle_type': vehicleType,
+        'p_pickup_time': pickupTime.toUtc().toIso8601String(),
+        'p_vehicle_id': vehicleId,
       },
     );
 
-  return ParkingSession.fromMap(
-    response as Map<String, dynamic>,
-  );
-}
+    return ParkingSession.fromMap(response as Map<String, dynamic>);
+  }
 
   Future<ParkingSession?> getActiveSession() async {
+    if (client.auth.currentUser == null) return null;
     final response = await client
         .from('parking_sessions')
         .select()
         .eq('status', 'active')
+        .eq('user_id', _userId)
         .order('started_at', ascending: false)
         .limit(1)
         .maybeSingle();
@@ -49,19 +52,16 @@ class SessionRepository {
   }) async {
     final response = await client
         .from('parking_sessions')
-        .update({
-          'pickup_time': pickupTime.toUtc().toIso8601String(),
-        })
+        .update({'pickup_time': pickupTime.toUtc().toIso8601String()})
         .eq('id', sessionId)
+        .eq('user_id', _userId)
         .select()
         .single();
 
     return ParkingSession.fromMap(response);
   }
 
-  Future<ParkingSession> endSession({
-    required String sessionId,
-  }) async {
+  Future<ParkingSession> endSession({required String sessionId}) async {
     final response = await client
         .from('parking_sessions')
         .update({
@@ -69,6 +69,7 @@ class SessionRepository {
           'ended_at': DateTime.now().toIso8601String(),
         })
         .eq('id', sessionId)
+        .eq('user_id', _userId)
         .select()
         .single();
 
@@ -76,10 +77,12 @@ class SessionRepository {
   }
 
   Future<bool> hasActiveSession() async {
+    if (client.auth.currentUser == null) return false;
     final response = await client
         .from('parking_sessions')
         .select('id')
         .eq('status', 'active')
+        .eq('user_id', _userId)
         .limit(1);
 
     return response.isNotEmpty;

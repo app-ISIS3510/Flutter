@@ -1,19 +1,16 @@
 import 'package:flutter/material.dart';
-
-import 'theme/app_theme.dart';
-import 'screens/main_navigation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'screens/auth_gate.dart';
+import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
 
   await Supabase.initialize(
     url: 'https://wwvkgpstphxeldscncyf.supabase.co',
     publishableKey: 'sb_publishable_i7kN0azgQ2JYTD1bm33ZFA_c6mLTnjN',
   );
-
-  print(Supabase.instance.client);
 
   runApp(const ParkUApp());
 }
@@ -31,7 +28,7 @@ class ParkUApp extends StatelessWidget {
         scaffoldBackgroundColor: AppColors.background,
         fontFamily: 'Inter',
       ),
-      home: const MainNavigationScreen(),
+      home: const AuthGate(),
     );
   }
 }

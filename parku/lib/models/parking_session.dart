@@ -6,6 +6,9 @@ class ParkingSession {
   final DateTime startedAt;
   final DateTime? endedAt;
   final String status;
+  final String vehicleType;
+  final String? vehicleId;
+  final String? vehiclePlate;
 
   ParkingSession({
     required this.id,
@@ -15,6 +18,9 @@ class ParkingSession {
     required this.startedAt,
     this.endedAt,
     required this.status,
+    this.vehicleType = 'car',
+    this.vehicleId,
+    this.vehiclePlate,
   });
 
   factory ParkingSession.fromMap(Map<String, dynamic> map) {
@@ -28,6 +34,9 @@ class ParkingSession {
           ? DateTime.parse(map['ended_at'] as String)
           : null,
       status: map['status'] as String,
+      vehicleType: map['vehicle_type'] as String? ?? 'car',
+      vehicleId: map['vehicle_id'] as String?,
+      vehiclePlate: map['vehicle_plate'] as String?,
     );
   }
 }

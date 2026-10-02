@@ -49,7 +49,7 @@ class ScreenHeader extends StatelessWidget {
 
 class PickupButton extends StatelessWidget {
   final String text;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final Color background;
   final Color foreground;
   final double height;
