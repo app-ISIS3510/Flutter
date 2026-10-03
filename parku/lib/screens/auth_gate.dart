@@ -222,7 +222,6 @@ class _AuthGateState extends State<AuthGate> {
           case AuthScreen.checkEmail:
             return CheckEmailScreen(
               email: resetEmail,
-              onOpenEmailApp: () {},
               onUseAnotherEmail: _showResetPassword,
               onBackToSignIn: _showSignIn,
             );

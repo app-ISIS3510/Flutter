@@ -4,14 +4,12 @@ import '../theme/app_theme.dart';
 
 class CheckEmailScreen extends StatelessWidget {
   final String email;
-  final VoidCallback onOpenEmailApp;
   final VoidCallback onUseAnotherEmail;
   final VoidCallback onBackToSignIn;
 
   const CheckEmailScreen({
     super.key,
     required this.email,
-    required this.onOpenEmailApp,
     required this.onUseAnotherEmail,
     required this.onBackToSignIn,
   });
@@ -116,26 +114,6 @@ class CheckEmailScreen extends StatelessWidget {
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  const SizedBox(height: 13),
-                  SizedBox(
-                    height: 43,
-                    child: FilledButton(
-                      onPressed: onOpenEmailApp,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                      ),
-                      child: const Text(
-                        'Open email app',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
                     ),
                   ),
                   const SizedBox(height: 13),
