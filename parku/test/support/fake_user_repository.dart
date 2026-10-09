@@ -13,6 +13,9 @@ class FakeUserRepository implements UserRepository {
   Object? failure;
   int addCalls = 0;
   @override
+  Future<bool> isAdmin() async => false;
+
+  @override
   Future<UserProfile> getProfile() async {
     if (failure != null) throw failure!;
     return profile;

@@ -61,6 +61,7 @@ void main() {
             body = user;
           case '/rest/v1/vehicles':
           case '/rest/v1/parking_sessions':
+          case '/rest/v1/app_admins':
             body = [];
           case '/rest/v1/parking_lots_with_availability':
             // Esta prueba cubre autenticación y perfil, sin el mapa nativo.

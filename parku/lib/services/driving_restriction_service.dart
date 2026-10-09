@@ -67,12 +67,15 @@ class DrivingRestrictionService {
         holidays2026.contains(dayKey)) {
       return DrivingRestriction(date: date, restricted: false);
     }
-    final lastDigit = int.tryParse(
-      vehicle.plate.substring(vehicle.plate.length - 1),
-    );
-    if (lastDigit == null) {
-      return DrivingRestriction(date: date, restricted: null);
+    final plate = vehicle.plate.trim().toUpperCase();
+    if (!RegExp(r'^[A-Z]{3}[0-9]{3}$').hasMatch(plate)) {
+      return DrivingRestriction(
+        date: date,
+        restricted: null,
+        explanation: 'Check the license plate before checking restrictions.',
+      );
     }
+    final lastDigit = int.parse(plate[5]);
     final firstGroup = lastDigit >= 1 && lastDigit <= 5;
     final restricted = date.day.isEven ? firstGroup : !firstGroup;
     return DrivingRestriction(

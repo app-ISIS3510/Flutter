@@ -52,6 +52,7 @@ void main() {
             controller: controller,
             onNavTap: (_) {},
             onMyParking: () {},
+            onAnalyticsDashboard: () {},
             onSignedOut: () {},
           ),
         ),
