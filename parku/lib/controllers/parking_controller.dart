@@ -1,4 +1,6 @@
 import '../models/parking.dart';
+import '../models/parking_option.dart';
+import '../models/vehicle.dart';
 import '../services/parking_service.dart';
 
 class ParkingController {
@@ -18,12 +20,11 @@ class ParkingController {
     return service.searchParkingLots(query);
   }
 
-  Future<List<Parking>> loadNearestParkingLots({
-    int limit = 4,
-  }) {
-    return service.getNearestParkingLots(
-      limit: limit,
-    );
+  Future<List<Parking>> loadNearestParkingLots({int limit = 4}) {
+    return service.getNearestParkingLots(limit: limit);
   }
-  
+
+  Future<List<ParkingOption>> loadParkingOptions({VehicleType? vehicleType}) {
+    return service.getParkingOptions(vehicleType: vehicleType);
+  }
 }

@@ -1,15 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import '../controllers/parking_controller.dart';
-import '../models/parking.dart';
+import '../models/parking_option.dart';
+import '../models/vehicle.dart';
 
 class SearchScreen extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onNavTap;
   final ValueChanged<String> onSearch;
   final ParkingController parkingController;
+  final Vehicle? selectedVehicle;
 
   const SearchScreen({
     super.key,
@@ -17,6 +21,7 @@ class SearchScreen extends StatefulWidget {
     required this.onNavTap,
     required this.onSearch,
     required this.parkingController,
+    this.selectedVehicle,
   });
 
   @override
@@ -26,15 +31,42 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+  late Future<List<ParkingOption>> _optionsFuture;
 
-  
   @override
   void initState() {
     super.initState();
+    _optionsFuture = _loadOptions();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _searchFocusNode.requestFocus();
+      if (mounted) _searchFocusNode.requestFocus();
     });
+  }
+
+  Future<List<ParkingOption>> _loadOptions() {
+    return widget.parkingController.loadParkingOptions(
+      vehicleType: widget.selectedVehicle?.type,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant SearchScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedVehicle?.type != widget.selectedVehicle?.type ||
+        oldWidget.parkingController != widget.parkingController) {
+      _optionsFuture = _loadOptions();
+    }
+  }
+
+  String _locationMessage(Object? error) {
+    if (error is TimeoutException) {
+      return 'Could not get your location. Check your GPS and reopen search.';
+    }
+    final message = error.toString();
+    if (message.startsWith('Exception: Location ')) {
+      return message.replaceFirst('Exception: ', '');
+    }
+    return 'Could not load nearby parking lots. Check your location settings and connection.';
   }
 
   @override
@@ -126,9 +158,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         filled: true,
                         fillColor: AppColors.white,
                         hintText: 'Enter parking lot name',
-                        hintStyle: const TextStyle(
-                          color: AppColors.greyText,
-                        ),
+                        hintStyle: const TextStyle(color: AppColors.greyText),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 18,
                           vertical: 18,
@@ -158,88 +188,100 @@ class _SearchScreenState extends State<SearchScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    FutureBuilder<List<Parking>>(
-                      future:
-                          widget.parkingController
-                              .loadNearestParkingLots(
-                        limit: 4,
+                    Text(
+                      widget.selectedVehicle == null
+                          ? 'Select a vehicle in Profile to see its availability.'
+                          : 'Availability for your ${widget.selectedVehicle!.type.label.toLowerCase()} · ${widget.selectedVehicle!.plate}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.greyText,
                       ),
+                    ),
+                    const SizedBox(height: 12),
+                    FutureBuilder<List<ParkingOption>>(
+                      future: _optionsFuture,
                       builder: (context, snapshot) {
                         if (snapshot.connectionState ==
                             ConnectionState.waiting) {
                           return const Center(
                             child: Padding(
-                              padding: EdgeInsets.symmetric(
-                                vertical: 20,
-                              ),
+                              padding: EdgeInsets.symmetric(vertical: 20),
                               child: CircularProgressIndicator(),
                             ),
                           );
                         }
 
                         if (snapshot.hasError) {
-                          return const SizedBox.shrink();
+                          return Text(
+                            _locationMessage(snapshot.error),
+                            style: const TextStyle(color: AppColors.greyText),
+                          );
                         }
 
-                        final suggestedParkingLots =
-                            snapshot.data ?? [];
+                        final suggestedParkingLots = snapshot.data ?? [];
 
                         if (suggestedParkingLots.isEmpty) {
-                          return const SizedBox.shrink();
+                          return const Text(
+                            'No nearby parking lots are available to display.',
+                            style: TextStyle(color: AppColors.greyText),
+                          );
                         }
 
                         return Column(
-                          children: suggestedParkingLots.map(
-                            (parking) {
-                              return Padding(
-                                padding: const EdgeInsets.only(
-                                  bottom: 10,
-                                ),
-                                child: InkWell(
-                                  onTap: () {
-                                    _selectSuggestion(
-                                      parking.name,
-                                    );
-                                  },
-                                  borderRadius:
-                                      BorderRadius.circular(14),
-                                  child: Container(
-                                    width: double.infinity,
-                                    padding:
-                                        const EdgeInsets.symmetric(
-                                      vertical: 14,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.white,
-                                      borderRadius:
-                                          BorderRadius.circular(14),
-                                    ),
-                                    child: Text(
-                                      parking.name,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        fontSize: 17,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.primary,
+                          children: suggestedParkingLots.take(4).map((option) {
+                            final parking = option.parking;
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: InkWell(
+                                onTap: () {
+                                  _selectSuggestion(parking.name);
+                                },
+                                borderRadius: BorderRadius.circular(14),
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.white,
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        parking.name,
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.primary,
+                                        ),
                                       ),
-                                    ),
+                                      if (option.availableSpaces != null) ...[
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          '${option.availableSpaces} estimated spaces · ${(option.availabilityRatio! * 100).round()}% of capacity',
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.greyText,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ),
-                              );
-                            },
-                          ).toList(),
+                              ),
+                            );
+                          }).toList(),
                         );
                       },
                     ),
-                  
                   ],
                 ),
               ),
             ),
-            NavBar(
-              currentIndex: widget.currentIndex,
-              onTap: widget.onNavTap,
-            ),
+            NavBar(currentIndex: widget.currentIndex, onTap: widget.onNavTap),
           ],
         ),
       ),

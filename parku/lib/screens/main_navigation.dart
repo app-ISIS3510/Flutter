@@ -89,6 +89,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int currentIndex = 0;
   bool showingMyParking = false;
   bool isLoadingSession = false;
+  bool isOpeningSearch = false;
 
   DateTime _buildPickupDateTime(String time) {
     final parts = time.split(':');
@@ -248,37 +249,54 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
   }
 
-  void openSearch() {
-    Navigator.push(
-      context,
-      MaterialPageRoute<void>(
-        builder: (context) => SearchScreen(
-          currentIndex: 1,
-          parkingController: parkingController,
-          onNavTap: (index) {
-            Navigator.pop(context);
-            changePage(index);
-          },
-          onSearch: (query) {
-            Navigator.push(
-              context,
-              MaterialPageRoute<void>(
-                builder: (context) => SearchResultsScreen(
-                  initialQuery: query,
-                  currentIndex: 1,
-                  parkingController: parkingController,
-                  onNavTap: (index) {
-                    _returnToMain();
-                    changePage(index);
-                  },
-                  onSelectParking: openParkingDetail,
-                ),
-              ),
-            );
-          },
+  Future<void> openSearch() async {
+    if (isOpeningSearch) return;
+    isOpeningSearch = true;
+    final userId = _userId;
+
+    try {
+      await profileController.load();
+      if (!mounted || userId != _userId) return;
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (context) => ListenableBuilder(
+            listenable: profileController,
+            builder: (context, child) => SearchScreen(
+              currentIndex: 1,
+              parkingController: parkingController,
+              selectedVehicle: profileController.error == null
+                  ? profileController.selectedVehicle
+                  : null,
+              onNavTap: (index) {
+                Navigator.pop(context);
+                changePage(index);
+              },
+              onSearch: (query) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (context) => SearchResultsScreen(
+                      initialQuery: query,
+                      currentIndex: 1,
+                      parkingController: parkingController,
+                      onNavTap: (index) {
+                        _returnToMain();
+                        changePage(index);
+                      },
+                      onSelectParking: openParkingDetail,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      isOpeningSearch = false;
+    }
   }
 
   void openParkingDetail(Map<String, String> parking) async {
