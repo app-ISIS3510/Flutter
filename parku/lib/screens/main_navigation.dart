@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../controllers/analytics_controller.dart';
-import '../controllers/dashboard_controller.dart';
 import '../controllers/favorite_controller.dart';
 import '../controllers/navigation_controller.dart';
 import '../controllers/parking_controller.dart';
@@ -14,21 +13,19 @@ import '../models/parking.dart';
 import '../models/parking_session.dart';
 import '../models/vehicle.dart';
 import '../repositories/analytics_repository.dart';
-import '../repositories/dashboard_repository.dart';
 import '../repositories/favorite_repository.dart';
 import '../repositories/parking_repository.dart';
 import '../repositories/session_repository.dart';
 import '../repositories/user_repository.dart';
 import '../services/analytics_service.dart';
-import '../services/dashboard_service.dart';
 import '../services/distance_manager.dart';
 import '../services/favorite_service.dart';
 import '../services/navigation_service.dart';
 import '../services/parking_service.dart';
 import '../services/profile_service.dart';
 import '../services/session_service.dart';
+import '../services/shared_dashboard_service.dart';
 import '../state/session_state.dart';
-import 'analytics_dashboard.dart';
 import 'change_pickup_time.dart';
 import 'favorites.dart';
 import 'home.dart';
@@ -76,9 +73,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   late final AnalyticsService analyticsService;
   late final AnalyticsController analyticsController;
 
-  late final DashboardRepository dashboardRepository;
-  late final DashboardService dashboardService;
-  late final DashboardController dashboardController;
+  final sharedDashboardService = SharedDashboardService();
 
   late final DistanceManager distanceManager;
 
@@ -137,10 +132,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     analyticsRepository = AnalyticsRepository(supabase);
     analyticsService = AnalyticsService(analyticsRepository);
     analyticsController = AnalyticsController(analyticsService);
-
-    dashboardRepository = DashboardRepository(supabase);
-    dashboardService = DashboardService(dashboardRepository);
-    dashboardController = DashboardController(dashboardService);
 
     profileController = ProfileController(
       ProfileService(
@@ -220,17 +211,22 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  void openAnalyticsDashboard() {
-    Navigator.push(
-      context,
-      MaterialPageRoute<void>(
-        builder: (context) {
-          return AnalyticsDashboardScreen(
-            dashboardController: dashboardController,
-          );
-        },
-      ),
-    );
+  Future<void> openAnalyticsDashboard() async {
+    if (!profileController.isAdmin) return;
+
+    try {
+      await sharedDashboardService.open();
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not open the analytics dashboard. Please try again.',
+          ),
+        ),
+      );
+    }
   }
 
   String _formatTimeForPicker(DateTime dateTime) {
@@ -381,6 +377,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     if (vehicle == null || !mounted) return;
 
+    final parkingId = parking['id'];
+
+    if (parkingId != null && parkingId.isNotEmpty) {
+      unawaited(
+        analyticsController
+            .track(
+              eventType: 'pickup_time_viewed',
+              screen: 'pickup_time',
+              parkingId: parkingId,
+            )
+            .catchError((Object _) {}),
+      );
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute<void>(
@@ -402,11 +412,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
             final pickup = _buildPickupDateTime(time);
 
-            await sessionController.startParking(
+            final stopwatch = Stopwatch()..start();
+
+            final session = await sessionController.startParking(
               parkingId: parkingId,
               pickupTime: pickup,
               vehicleId: chosenVehicle.id,
             );
+
+            stopwatch.stop();
+
+            final durationMs = stopwatch.elapsedMilliseconds;
 
             unawaited(
               analyticsController
@@ -416,6 +432,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     parkingId: parkingId,
                     metadata: {
                       'pickup_time': pickup.toIso8601String(),
+                      'duration_ms': durationMs,
+                      'platform': 'flutter',
+                      'session_id': session.id,
                     },
                   )
                   .catchError((Object _) {}),

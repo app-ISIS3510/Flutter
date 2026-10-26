@@ -183,7 +183,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _menu(
                         'profile_clock',
                         'Analytics dashboard',
-                        'View ParkU business metrics',
+                        'Open shared metrics in your browser',
                         widget.onAnalyticsDashboard,
                       ),
 
