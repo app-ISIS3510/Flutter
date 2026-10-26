@@ -47,6 +47,7 @@ void main() {
             controller: controller,
             onNavTap: (_) {},
             onMyParking: () {},
+            onAnalyticsDashboard: () {},
             onSignedOut: () {},
           ),
           2 => EditProfileScreen(controller: controller, onNavTap: (_) {}),

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:parku/main.dart';
@@ -11,10 +12,15 @@ import 'package:parku/screens/profile/vehicles_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'support/memory_auth_storage.dart';
+import 'support/parking_fakes.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  var parkingAvailable = false;
+  List<Map<String, dynamic>> vehicles = [];
   setUp(() async {
+    parkingAvailable = false;
+    vehicles = [];
     final user = {
       'id': 'user-1',
       'aud': 'authenticated',
@@ -60,12 +66,17 @@ void main() {
           case '/auth/v1/user':
             body = user;
           case '/rest/v1/vehicles':
+            body = vehicles;
           case '/rest/v1/parking_sessions':
+          case '/rest/v1/app_admins':
             body = [];
           case '/rest/v1/parking_lots_with_availability':
-            // Esta prueba cubre autenticación y perfil, sin el mapa nativo.
-            status = 400;
-            body = {'message': 'Map unavailable in this test'};
+            if (parkingAvailable) {
+              body = [parkingData()];
+            } else {
+              status = 400;
+              body = {'message': 'Map unavailable in this test'};
+            }
           case '/auth/v1/logout':
             body = {};
           default:
@@ -81,6 +92,63 @@ void main() {
     );
   });
   tearDown(() async => Supabase.instance.dispose());
+
+  testWidgets(
+    'search loads the saved vehicle and reads it again when reopened',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final originalPlatform = GeolocatorPlatform.instance;
+      final location = FakeLocationPlatform();
+      GeolocatorPlatform.instance = location;
+      addTearDown(() => GeolocatorPlatform.instance = originalPlatform);
+      vehicles = [
+        {
+          'id': 'car-1',
+          'vehicle_type': 'car',
+          'plate': 'ABC123',
+          'is_selected': true,
+        },
+      ];
+
+      await tester.pumpWidget(const ParkUApp());
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'juan@example.com');
+      await tester.enterText(find.byType(TextField).at(1), 'test-password');
+      await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+      await tester.pumpAndSettle();
+      parkingAvailable = true;
+      await tester.tap(find.text('Parking lots'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Search parking lots'));
+      await tester.pumpAndSettle();
+      expect(find.text('Availability for your car · ABC123'), findsOneWidget);
+      expect(find.text('8 estimated spaces · 40% of capacity'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      vehicles = [
+        {
+          'id': 'moto-1',
+          'vehicle_type': 'motorcycle',
+          'plate': 'XYZ45D',
+          'is_selected': true,
+        },
+      ];
+      await tester.tap(find.text('Search parking lots'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Availability for your motorcycle · XYZ45D'),
+        findsOneWidget,
+      );
+      expect(find.text('7 estimated spaces · 70% of capacity'), findsOneWidget);
+      expect(location.positionCalls, 2);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets(
     'sign in opens the complete profile and sign out returns to login',

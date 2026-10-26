@@ -26,6 +26,7 @@ void main() {
             controller: controller,
             onNavTap: (value) => nav = value,
             onMyParking: () => parkingOpened = true,
+            onAnalyticsDashboard: () {},
             onSignedOut: () => signedOut = true,
           ),
         ),

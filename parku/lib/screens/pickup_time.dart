@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../models/vehicle.dart';
 import '../controllers/session_controller.dart';
+import '../services/driving_restriction_service.dart';
 import '../widgets/design_icon.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/pickup_widgets.dart';
@@ -15,6 +16,7 @@ class PickupTimeScreen extends StatefulWidget {
   final Future<Vehicle?> Function() onChangeVehicle;
   final String openingTime;
   final String closingTime;
+  final DateTime Function()? currentTime;
 
   const PickupTimeScreen({
     super.key,
@@ -24,6 +26,7 @@ class PickupTimeScreen extends StatefulWidget {
     required this.onChangeVehicle,
     required this.openingTime,
     required this.closingTime,
+    this.currentTime,
   });
 
   @override
@@ -80,7 +83,7 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
   }
 
   List<String> _generateAvailableTimes() {
-    final now = DateTime.now();
+    final now = widget.currentTime?.call() ?? DateTime.now();
 
     final opening = _parseParkingTime(widget.openingTime, now);
 
@@ -133,9 +136,11 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
   Future<void> _startParking() async {
     if (isStartingParking) return;
 
-    if (selectedVehicle == null) return;
+    final vehicle = selectedVehicle;
+    final time = selectedTime;
+    if (vehicle == null) return;
 
-    if (selectedTime == null) {
+    if (time == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('There are no available pickup times today.'),
@@ -150,7 +155,10 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
     });
 
     try {
-      await widget.onStartParking(selectedTime!, selectedVehicle!);
+      final canContinue = await _showDrivingRestriction(vehicle);
+      if (!canContinue || !mounted) return;
+
+      await widget.onStartParking(time, vehicle);
     } catch (error) {
       if (!mounted) return;
 
@@ -164,6 +172,55 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
         });
       }
     }
+  }
+
+  Future<bool> _showDrivingRestriction(Vehicle vehicle) async {
+    final restriction = DrivingRestrictionService().check(
+      vehicle,
+      now: widget.currentTime?.call(),
+    );
+    if (restriction.restricted == false) return true;
+
+    final date = restriction.date;
+    final today = '${date.day}/${date.month}/${date.year}';
+    final isRestricted = restriction.restricted == true;
+
+    final continueParking = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.white,
+        scrollable: true,
+        title: Text(
+          isRestricted ? 'Pico y placa today' : 'Check driving restrictions',
+          style: const TextStyle(
+            color: AppColors.darkText,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: Text(
+          isRestricted
+              ? '${vehicle.plate} has driving restrictions in Bogotá today ($today).\n\n'
+                    'Restricted hours: ${restriction.hours}.\n'
+                    '${restriction.explanation ?? ''}\n'
+                    'You can still park. Check the restrictions before driving.'
+              : 'We could not confirm today’s restrictions for ${vehicle.plate}. '
+                    'Check the official information before driving.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            style: TextButton.styleFrom(foregroundColor: AppColors.primary),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+            child: const Text('Continue parking'),
+          ),
+        ],
+      ),
+    );
+    return continueParking == true;
   }
 
   @override

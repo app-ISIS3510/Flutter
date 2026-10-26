@@ -67,11 +67,15 @@ class ParkingListScreen extends StatelessWidget {
                         size: 25,
                       ),
                       SizedBox(width: 12),
-                      Text(
-                        'Search parking lots',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: AppColors.greyText,
+                      Expanded(
+                        child: Text(
+                          'Search parking lots',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: AppColors.greyText,
+                          ),
                         ),
                       ),
                     ],
