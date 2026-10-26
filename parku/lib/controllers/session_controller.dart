@@ -63,8 +63,14 @@ class SessionController {
     return session;
   }
 
-  Future<ParkingSession> endParking({required String sessionId}) async {
-    final session = await service.endParking(sessionId: sessionId);
+  Future<ParkingSession> endParking({
+    required String sessionId,
+    String parkingName = 'Parking stay',
+  }) async {
+    final session = await service.endParking(
+      sessionId: sessionId,
+      parkingName: parkingName,
+    );
     sessionState.clearSession();
     return session;
   }

@@ -36,6 +36,7 @@ import 'parking_detail.dart';
 import 'parking_list.dart';
 import 'pickup_time.dart';
 import 'profile/profile_screen.dart';
+import 'profile/parking_history_screen.dart';
 import 'profile/vehicles_screen.dart';
 import 'search.dart';
 import 'search_results.dart';
@@ -197,6 +198,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   void _profileNavTap(int index) {
     _returnToMain();
     changePage(index);
+  }
+
+  void openParkingHistory() {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => ParkingHistoryScreen(
+          service: sessionService,
+          onNavTap: _profileNavTap,
+        ),
+      ),
+    );
   }
 
   Future<Vehicle?> _chooseVehicle() {
@@ -517,14 +530,27 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  Future<void> endParking() async {
+  Future<void> endParking({String parkingName = 'Parking stay'}) async {
     final session = await sessionController.loadActiveSession();
 
     if (session == null) return;
 
     await sessionController.endParking(
       sessionId: session.id,
+      parkingName: parkingName,
     );
+
+    if (mounted &&
+        _userId == session.userId &&
+        sessionService.historySaveFailed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Parking ended, but its summary could not be saved on this device.',
+          ),
+        ),
+      );
+    }
 
     unawaited(
       analyticsController
@@ -596,7 +622,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           session: session,
           parking: parking,
           navigationController: navigationController,
-          onEndParking: endParking,
+          onEndParking: () => endParking(parkingName: parking.name),
           onChangePickupTime: openChangePickupTime,
         );
       },
@@ -676,6 +702,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           controller: profileController,
           onNavTap: _profileNavTap,
           onMyParking: openMyParking,
+          onParkingHistory:
+              sessionService.historyAvailable ? openParkingHistory : null,
           onAnalyticsDashboard:
               openAnalyticsDashboard,
           onSignedOut: () {
