@@ -220,7 +220,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.text(
-        'Could not start parking. Check your connection and try again.',
+        'Could not complete this request. Check your connection and try again.',
       ),
       findsOneWidget,
     );

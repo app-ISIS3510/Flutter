@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/parking_session.dart';
+import '../services/connection_failure.dart';
 
 class SessionRepository {
   final SupabaseClient client;
@@ -49,16 +50,33 @@ class SessionRepository {
   Future<ParkingSession> updatePickupTime({
     required String sessionId,
     required DateTime pickupTime,
+    DateTime? previousPickupTime,
   }) async {
-    final response = await client
+    var query = client
         .from('parking_sessions')
         .update({'pickup_time': pickupTime.toUtc().toIso8601String()})
         .eq('id', sessionId)
         .eq('user_id', _userId)
-        .select()
-        .single();
+        .eq('status', 'active');
+    if (previousPickupTime != null) {
+      query = query.eq(
+        'pickup_time',
+        previousPickupTime.toUtc().toIso8601String(),
+      );
+    }
+    final response = await query.select();
+    if (response.isEmpty) {
+      final session = await getSessionById(sessionId);
+      if (session?.status == 'active' &&
+          session!.pickupTime.isAtSameMomentAs(pickupTime)) {
+        return session;
+      }
+      throw const ConnectionFailure(
+        'This parking session changed. Refresh My parking before trying again.',
+      );
+    }
 
-    return ParkingSession.fromMap(response);
+    return ParkingSession.fromMap(response.single);
   }
 
   Future<ParkingSession> endSession({required String sessionId}) async {
@@ -66,14 +84,48 @@ class SessionRepository {
         .from('parking_sessions')
         .update({
           'status': 'completed',
-          'ended_at': DateTime.now().toIso8601String(),
+          'ended_at': DateTime.now().toUtc().toIso8601String(),
         })
         .eq('id', sessionId)
         .eq('user_id', _userId)
-        .select()
-        .single();
+        .eq('status', 'active')
+        .select();
 
-    return ParkingSession.fromMap(response);
+    if (response.isEmpty) {
+      final session = await getSessionById(sessionId);
+      if (session?.status == 'completed') return session!;
+      throw const ConnectionFailure(
+        'This parking session changed. Refresh My parking before trying again.',
+      );
+    }
+
+    return ParkingSession.fromMap(response.single);
+  }
+
+  Future<ParkingSession?> getSessionById(String id) async {
+    final row = await client
+        .from('parking_sessions')
+        .select()
+        .eq('id', id)
+        .eq('user_id', _userId)
+        .maybeSingle();
+    return row == null ? null : ParkingSession.fromMap(row);
+  }
+
+  Future<List<ParkingSession>> getMatchingSessions({
+    required String parkingId,
+    required String vehicleId,
+    required DateTime pickupTime,
+  }) async {
+    final rows = await client
+        .from('parking_sessions')
+        .select()
+        .eq('user_id', _userId)
+        .eq('parking_id', parkingId)
+        .eq('vehicle_id', vehicleId)
+        .eq('pickup_time', pickupTime.toUtc().toIso8601String())
+        .order('started_at', ascending: false);
+    return rows.map(ParkingSession.fromMap).toList();
   }
 
   Future<bool> hasActiveSession() async {

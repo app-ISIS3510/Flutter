@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/pickup_widgets.dart';
+import '../controllers/session_controller.dart';
+import 'profile/profile_widgets.dart';
 
 class ChangePickupTimeScreen extends StatefulWidget {
   final String initialTime;
@@ -11,6 +13,9 @@ class ChangePickupTimeScreen extends StatefulWidget {
 
   final ValueChanged<int> onNavTap;
   final Future<void> Function(String) onSave;
+  final ValueChanged<String>? onDraftChanged;
+  final String? notice;
+  final DateTime Function()? currentTime;
 
   const ChangePickupTimeScreen({
     super.key,
@@ -19,15 +24,16 @@ class ChangePickupTimeScreen extends StatefulWidget {
     required this.closingTime,
     required this.onNavTap,
     required this.onSave,
+    this.onDraftChanged,
+    this.notice,
+    this.currentTime,
   });
 
   @override
-  State<ChangePickupTimeScreen> createState() =>
-      _ChangePickupTimeScreenState();
+  State<ChangePickupTimeScreen> createState() => _ChangePickupTimeScreenState();
 }
 
-class _ChangePickupTimeScreenState
-    extends State<ChangePickupTimeScreen> {
+class _ChangePickupTimeScreenState extends State<ChangePickupTimeScreen> {
   String? selectedTime;
   bool isSaving = false;
 
@@ -46,30 +52,18 @@ class _ChangePickupTimeScreenState
     }
   }
 
-  DateTime _parseParkingTime(
-    String time,
-    DateTime day,
-  ) {
-    final cleanTime =
-        time.length >= 5 ? time.substring(0, 5) : time;
+  DateTime _parseParkingTime(String time, DateTime day) {
+    final cleanTime = time.length >= 5 ? time.substring(0, 5) : time;
 
     final parts = cleanTime.split(':');
 
     final hour = int.parse(parts[0]);
     final minute = int.parse(parts[1]);
 
-    return DateTime(
-      day.year,
-      day.month,
-      day.day,
-      hour,
-      minute,
-    );
+    return DateTime(day.year, day.month, day.day, hour, minute);
   }
 
-  DateTime _roundToNext30Minutes(
-    DateTime dateTime,
-  ) {
+  DateTime _roundToNext30Minutes(DateTime dateTime) {
     if (dateTime.minute < 30) {
       return DateTime(
         dateTime.year,
@@ -90,16 +84,13 @@ class _ChangePickupTimeScreenState
   }
 
   List<String> _generateAvailableTimes() {
-    final now = DateTime.now();
+    final now = widget.currentTime?.call() ?? DateTime.now();
 
-    final opening =
-        _parseParkingTime(widget.openingTime, now);
+    final opening = _parseParkingTime(widget.openingTime, now);
 
-    final closing =
-        _parseParkingTime(widget.closingTime, now);
+    final closing = _parseParkingTime(widget.closingTime, now);
 
-    DateTime firstPossibleTime =
-        _roundToNext30Minutes(now);
+    DateTime firstPossibleTime = _roundToNext30Minutes(now);
 
     if (firstPossibleTime.isBefore(opening)) {
       firstPossibleTime = opening;
@@ -114,25 +105,20 @@ class _ChangePickupTimeScreenState
     DateTime current = firstPossibleTime;
 
     while (!current.isAfter(closing)) {
-      final hour =
-          current.hour.toString().padLeft(2, '0');
+      final hour = current.hour.toString().padLeft(2, '0');
 
-      final minute =
-          current.minute.toString().padLeft(2, '0');
+      final minute = current.minute.toString().padLeft(2, '0');
 
       times.add('$hour:$minute');
 
-      current = current.add(
-        const Duration(minutes: 30),
-      );
+      current = current.add(const Duration(minutes: 30));
     }
 
     return times;
   }
 
   String _formatTime(String time) {
-    final cleanTime =
-        time.length >= 5 ? time.substring(0, 5) : time;
+    final cleanTime = time.length >= 5 ? time.substring(0, 5) : time;
 
     final parts = cleanTime.split(':');
 
@@ -160,9 +146,7 @@ class _ChangePickupTimeScreenState
     });
 
     try {
-      await widget.onSave(
-        selectedTime!,
-      );
+      await widget.onSave(selectedTime!);
 
       if (!mounted) return;
 
@@ -171,11 +155,7 @@ class _ChangePickupTimeScreenState
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not update pickup time: $error',
-          ),
-        ),
+        SnackBar(content: Text(SessionController.messageFor(error))),
       );
     } finally {
       if (mounted) {
@@ -188,8 +168,7 @@ class _ChangePickupTimeScreenState
 
   @override
   Widget build(BuildContext context) {
-    final hasAvailableTimes =
-        availableTimes.isNotEmpty;
+    final hasAvailableTimes = availableTimes.isNotEmpty;
 
     return Scaffold(
       body: SafeArea(
@@ -197,20 +176,13 @@ class _ChangePickupTimeScreenState
           children: [
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(
-                  24,
-                  18,
-                  24,
-                  24,
-                ),
+                padding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     ScreenHeader(
                       title: 'Change pickup time',
-                      onBack: () =>
-                          Navigator.pop(context),
+                      onBack: () => Navigator.pop(context),
                     ),
 
                     const SizedBox(height: 36),
@@ -220,10 +192,8 @@ class _ChangePickupTimeScreenState
                       style: TextStyle(
                         fontSize: 25,
                         height: 1.35,
-                        fontWeight:
-                            FontWeight.w700,
-                        color:
-                            AppColors.darkText,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.darkText,
                       ),
                     ),
 
@@ -234,8 +204,7 @@ class _ChangePickupTimeScreenState
                       style: TextStyle(
                         fontSize: 16,
                         height: 1.35,
-                        color:
-                            AppColors.greyText,
+                        color: AppColors.greyText,
                       ),
                     ),
 
@@ -251,81 +220,65 @@ class _ChangePickupTimeScreenState
 
                     const SizedBox(height: 16),
 
+                    if (widget.notice != null) ...[
+                      ProfileNotice(widget.notice!),
+                      const SizedBox(height: 16),
+                    ],
+
                     if (hasAvailableTimes) ...[
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(
-                          16,
-                        ),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: AppColors.lightPurple,
-                          borderRadius:
-                              BorderRadius.circular(
-                            20,
-                          ),
+                          borderRadius: BorderRadius.circular(20),
                         ),
                         child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
                               'NEW PICKUP TIME',
                               style: TextStyle(
                                 fontSize: 12,
                                 height: 1.35,
-                                fontWeight:
-                                    FontWeight.w600,
-                                color:
-                                    AppColors.primary,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
                               ),
                             ),
 
                             const SizedBox(height: 12),
 
                             DropdownButtonHideUnderline(
-                              child:
-                                  DropdownButton<String>(
+                              child: DropdownButton<String>(
                                 value: selectedTime,
                                 isExpanded: true,
                                 icon: const Icon(
-                                  Icons
-                                      .keyboard_arrow_down,
-                                  color:
-                                      AppColors.primary,
+                                  Icons.keyboard_arrow_down,
+                                  color: AppColors.primary,
                                 ),
-                                style:
-                                    const TextStyle(
+                                style: const TextStyle(
                                   fontSize: 30,
-                                  fontWeight:
-                                      FontWeight.w700,
-                                  color:
-                                      AppColors.primary,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary,
                                 ),
-                                items:
-                                    availableTimes
-                                        .map(
-                                  (time) {
-                                    return DropdownMenuItem<
-                                        String>(
-                                      value: time,
-                                      child: Text(
-                                        _formatTime(
-                                          time,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ).toList(),
-                                onChanged: (value) {
-                                  if (value == null) {
-                                    return;
-                                  }
+                                items: availableTimes.map((time) {
+                                  return DropdownMenuItem<String>(
+                                    value: time,
+                                    child: Text(_formatTime(time)),
+                                  );
+                                }).toList(),
+                                onChanged: isSaving
+                                    ? null
+                                    : (value) {
+                                        if (value == null) {
+                                          return;
+                                        }
 
-                                  setState(() {
-                                    selectedTime =
-                                        value;
-                                  });
-                                },
+                                        setState(() {
+                                          selectedTime = value;
+                                        });
+                                        widget.onDraftChanged?.call(value);
+                                      },
                               ),
                             ),
                           ],
@@ -334,28 +287,20 @@ class _ChangePickupTimeScreenState
                     ] else ...[
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(
-                          18,
-                        ),
+                        padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
                           color: AppColors.lightPurple,
-                          borderRadius:
-                              BorderRadius.circular(
-                            20,
-                          ),
+                          borderRadius: BorderRadius.circular(20),
                         ),
                         child: const Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               'No pickup times available',
                               style: TextStyle(
                                 fontSize: 18,
-                                fontWeight:
-                                    FontWeight.w700,
-                                color:
-                                    AppColors.darkText,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.darkText,
                               ),
                             ),
 
@@ -365,8 +310,7 @@ class _ChangePickupTimeScreenState
                               'This parking lot is closing soon or has already closed for today.',
                               style: TextStyle(
                                 fontSize: 14,
-                                color:
-                                    AppColors.greyText,
+                                color: AppColors.greyText,
                               ),
                             ),
                           ],
@@ -377,14 +321,10 @@ class _ChangePickupTimeScreenState
                     const SizedBox(height: 16),
 
                     PickupButton(
-                      text: isSaving
-                          ? 'Saving...'
-                          : 'Save pickup time',
-                      onPressed:
-                          !hasAvailableTimes ||
-                                  isSaving
-                              ? () {}
-                              : _savePickupTime,
+                      text: isSaving ? 'Saving...' : 'Save pickup time',
+                      onPressed: !hasAvailableTimes || isSaving
+                          ? null
+                          : _savePickupTime,
                     ),
 
                     const SizedBox(height: 16),
@@ -393,18 +333,14 @@ class _ChangePickupTimeScreenState
                       text: 'Back to my parking',
                       background: AppColors.white,
                       foreground: AppColors.primary,
-                      onPressed: () =>
-                          Navigator.pop(context),
+                      onPressed: () => Navigator.pop(context),
                     ),
                   ],
                 ),
               ),
             ),
 
-            NavBar(
-              currentIndex: 3,
-              onTap: widget.onNavTap,
-            ),
+            NavBar(currentIndex: 3, onTap: widget.onNavTap),
           ],
         ),
       ),

@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'screens/auth_gate.dart';
 import 'theme/app_theme.dart';
+import 'services/profile_service.dart';
+import 'services/session_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +18,9 @@ Future<void> main() async {
 }
 
 class ParkUApp extends StatelessWidget {
-  const ParkUApp({super.key});
+  final ProfileService? profileService;
+  final SessionService? sessionService;
+  const ParkUApp({super.key, this.profileService, this.sessionService});
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +32,10 @@ class ParkUApp extends StatelessWidget {
         scaffoldBackgroundColor: AppColors.background,
         fontFamily: 'Inter',
       ),
-      home: const AuthGate(),
+      home: AuthGate(
+        profileService: profileService,
+        sessionService: sessionService,
+      ),
     );
   }
 }

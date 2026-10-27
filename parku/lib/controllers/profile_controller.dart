@@ -5,6 +5,7 @@ import '../models/user_profile.dart';
 import '../models/vehicle.dart';
 import '../services/profile_service.dart';
 import '../services/driving_restriction_service.dart';
+import '../services/connection_failure.dart';
 
 class ProfileController extends ChangeNotifier {
   final ProfileService service;
@@ -18,6 +19,23 @@ class ProfileController extends ChangeNotifier {
   String? error;
   int _version = 0;
   bool _disposed = false;
+
+  bool get usingSavedData => service.usingSavedData;
+  Map<String, dynamic>? get pendingChange => service.pendingChange;
+  Map<String, dynamic>? get profileDraft => service.profileDraft;
+  Map<String, dynamic>? get vehicleDraft => service.vehicleDraft;
+  String? get notice {
+    if (pendingChange != null) {
+      return 'A previous change is not confirmed. Reconnect and refresh before retrying it.';
+    }
+    if (usingSavedData) {
+      return 'Showing saved information. It may be out of date. Reconnect and refresh to update it.';
+    }
+    if (service.localSaveFailed) {
+      return 'Your information loaded, but its offline copy could not be saved.';
+    }
+    return null;
+  }
 
   Vehicle? get selectedVehicle {
     for (final vehicle in vehicles) {
@@ -45,6 +63,7 @@ class ProfileController extends ChangeNotifier {
 
   void clear() {
     _version++;
+    service.clear();
     profile = null;
     vehicles = [];
     error = null;
@@ -55,12 +74,14 @@ class ProfileController extends ChangeNotifier {
   }
 
   Future<void> load() async {
-    if (busy || _disposed) return;
+    if (busy || loading || _disposed) return;
     final version = ++_version;
     loading = true;
     error = null;
     _notify();
     try {
+      await service.restorePendingChange();
+      if (version != _version) return;
       final user = await service.getProfile();
       if (version != _version) return;
       profile = user;
@@ -70,6 +91,7 @@ class ProfileController extends ChangeNotifier {
       final savedVehicles = await service.getVehicles();
       if (version != _version) return;
       vehicles = savedVehicles;
+      await service.checkPendingChange();
     } catch (e) {
       if (version == _version) error = messageFor(e);
     } finally {
@@ -142,6 +164,7 @@ class ProfileController extends ChangeNotifier {
   }
 
   static String messageFor(Object error) {
+    if (error is ConnectionFailure) return error.message;
     if (error is FormatException) return error.message;
     if (error is AuthException) return error.message;
     if (error is PostgrestException) {

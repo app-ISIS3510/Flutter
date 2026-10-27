@@ -14,6 +14,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'support/memory_auth_storage.dart';
 import 'support/parking_fakes.dart';
 
+import 'package:parku/services/profile_service.dart';
+import 'package:parku/repositories/user_repository.dart';
+import 'package:parku/repositories/user_local_store.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   var parkingAvailable = false;
@@ -93,6 +97,16 @@ void main() {
   });
   tearDown(() async => Supabase.instance.dispose());
 
+  Widget app() {
+    final client = Supabase.instance.client;
+    return ParkUApp(
+      profileService: ProfileService(
+        SupabaseUserRepository(client),
+        store: UserLocalStore.memory(client),
+      ),
+    );
+  }
+
   testWidgets(
     'search loads the saved vehicle and reads it again when reopened',
     (tester) async {
@@ -113,7 +127,7 @@ void main() {
         },
       ];
 
-      await tester.pumpWidget(const ParkUApp());
+      await tester.pumpWidget(app());
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).at(0), 'juan@example.com');
       await tester.enterText(find.byType(TextField).at(1), 'test-password');
@@ -157,7 +171,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(const ParkUApp());
+      await tester.pumpWidget(app());
       await tester.pumpAndSettle();
       expect(find.byType(SignInScreen), findsOneWidget);
       await tester.enterText(find.byType(TextField).at(0), 'juan@example.com');

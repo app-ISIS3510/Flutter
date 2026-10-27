@@ -39,4 +39,17 @@ class ParkingSession {
       vehiclePlate: map['vehicle_plate'] as String?,
     );
   }
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'user_id': userId,
+    'parking_id': parkingId,
+    'pickup_time': pickupTime.toUtc().toIso8601String(),
+    'started_at': startedAt.toUtc().toIso8601String(),
+    'ended_at': endedAt?.toUtc().toIso8601String(),
+    'status': status,
+    'vehicle_type': vehicleType,
+    'vehicle_id': vehicleId,
+    'vehicle_plate': vehiclePlate,
+  };
 }

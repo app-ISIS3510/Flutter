@@ -33,6 +33,11 @@ class SupabaseUserRepository implements UserRepository {
     pendingEmail: user.newEmail,
   );
 
+  UserProfile? get cachedProfile {
+    final user = client.auth.currentUser;
+    return user == null ? null : _profile(user);
+  }
+
   @override
   Future<bool> isAdmin() async {
     final response = await client

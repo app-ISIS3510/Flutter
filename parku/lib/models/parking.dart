@@ -36,14 +36,11 @@ class Parking {
       longitude: (map['longitude'] as num?)?.toDouble(),
       carSpaces: map['car_spaces'] as int? ?? 0,
       motorcycleSpaces: map['motorcycle_spaces'] as int? ?? 0,
-      pricePerMinute:
-          (map['price_per_minute'] as num?)?.toDouble() ?? 0,
+      pricePerMinute: (map['price_per_minute'] as num?)?.toDouble() ?? 0,
       openingTime: map['opening_time']?.toString(),
       closingTime: map['closing_time']?.toString(),
       availableCarSpaces:
-          map['available_car_spaces'] as int? ??
-          map['car_spaces'] as int? ??
-          0,
+          map['available_car_spaces'] as int? ?? map['car_spaces'] as int? ?? 0,
 
       availableMotorcycleSpaces:
           map['available_motorcycle_spaces'] as int? ??
@@ -51,4 +48,19 @@ class Parking {
           0,
     );
   }
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'name': name,
+    'address': address,
+    'latitude': latitude,
+    'longitude': longitude,
+    'car_spaces': carSpaces,
+    'motorcycle_spaces': motorcycleSpaces,
+    'price_per_minute': pricePerMinute,
+    'opening_time': openingTime,
+    'closing_time': closingTime,
+    'available_car_spaces': availableCarSpaces,
+    'available_motorcycle_spaces': availableMotorcycleSpaces,
+  };
 }

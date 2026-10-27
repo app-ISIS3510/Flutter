@@ -11,6 +11,8 @@ import 'new_password.dart';
 import 'password_updated.dart';
 import 'reset_password.dart';
 import 'sign_in.dart';
+import '../services/profile_service.dart';
+import '../services/session_service.dart';
 
 enum AuthScreen {
   signIn,
@@ -22,7 +24,9 @@ enum AuthScreen {
 }
 
 class AuthGate extends StatefulWidget {
-  const AuthGate({super.key});
+  final ProfileService? profileService;
+  final SessionService? sessionService;
+  const AuthGate({super.key, this.profileService, this.sessionService});
 
   @override
   State<AuthGate> createState() => _AuthGateState();
@@ -199,7 +203,11 @@ class _AuthGateState extends State<AuthGate> {
         }
 
         if (session != null) {
-          return const MainNavigationScreen();
+          return MainNavigationScreen(
+            key: ValueKey(session.user.id),
+            profileService: widget.profileService,
+            sessionService: widget.sessionService,
+          );
         }
 
         switch (currentScreen) {

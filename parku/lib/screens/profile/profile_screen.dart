@@ -103,6 +103,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             if (controller.loading)
               const Center(child: CircularProgressIndicator()),
+            if (controller.notice != null) ...[
+              ProfileNotice(
+                controller.notice!,
+                onRetry: controller.loading ? null : controller.load,
+              ),
+              const SizedBox(height: 16),
+            ],
             if (controller.error != null) ...[
               ProfileError(controller.error!),
               const SizedBox(height: 16),

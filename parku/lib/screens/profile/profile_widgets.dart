@@ -135,6 +135,25 @@ class ProfileError extends StatelessWidget {
   );
 }
 
+class ProfileNotice extends StatelessWidget {
+  final String message;
+  final VoidCallback? onRetry;
+  const ProfileNotice(this.message, {super.key, this.onRetry});
+
+  @override
+  Widget build(BuildContext context) => ProfileCard(
+    color: AppColors.lightPurple,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(message, style: profileText(13)),
+        if (onRetry != null)
+          TextButton(onPressed: onRetry, child: const Text('Refresh')),
+      ],
+    ),
+  );
+}
+
 class ProfileField extends StatelessWidget {
   final String label;
   final String hint;

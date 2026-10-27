@@ -3,10 +3,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/parking_session.dart';
 import '../services/session_service.dart';
 import '../state/session_state.dart';
+import '../services/connection_failure.dart';
 
 class SessionController {
   static String messageFor(Object error) {
-    if (error is AuthException) return 'Sign in to start parking.';
+    if (error is ConnectionFailure) return error.message;
+    if (isConnectionError(error)) {
+      return 'Could not reach the server. Your selection has been kept. Reconnect and try again.';
+    }
+    if (error is AuthException) return 'Sign in to continue.';
+    if (error is FormatException) return error.message;
     if (error is PostgrestException) {
       if (error.message.contains('NO_AVAILABLE_SPACES')) {
         return 'This parking lot has no available spaces.';
@@ -21,58 +27,104 @@ class SessionController {
         return 'Choose a pickup time later than the current time.';
       }
     }
-    return 'Could not start parking. Check your connection and try again.';
+    return 'Could not complete this request. Check your connection and try again.';
   }
 
   final SessionService service;
   final SessionState sessionState;
+  int _version = 0;
+  int? _busyVersion;
 
   SessionController(this.service, this.sessionState);
+
+  void clear() {
+    _version++;
+    _busyVersion = null;
+    service.clear();
+    sessionState.clearSession();
+  }
+
+  void dispose() {
+    _version++;
+    _busyVersion = null;
+  }
+
+  Future<ParkingSession> _change(
+    Future<ParkingSession> Function() action,
+  ) async {
+    if (_busyVersion != null) {
+      throw const ConnectionFailure(
+        'A parking request is already being checked. Please wait.',
+      );
+    }
+    final version = ++_version;
+    final userId = service.currentUserId;
+    _busyVersion = version;
+    try {
+      final session = await action();
+      if (version == _version && userId == service.currentUserId) {
+        sessionState.setActiveSession(
+          session.status == 'active' ? session : null,
+        );
+      }
+      return session;
+    } finally {
+      if (_busyVersion == version) {
+        _busyVersion = null;
+        _version++;
+      }
+    }
+  }
 
   Future<ParkingSession> startParking({
     required String parkingId,
     required DateTime pickupTime,
     required String vehicleId,
+    String parkingName = 'Parking stay',
   }) async {
-    final session = await service.startParking(
-      parkingId: parkingId,
-      pickupTime: pickupTime,
-      vehicleId: vehicleId,
+    return _change(
+      () => service.startParking(
+        parkingId: parkingId,
+        pickupTime: pickupTime,
+        vehicleId: vehicleId,
+        parkingName: parkingName,
+      ),
     );
-
-    sessionState.setActiveSession(session);
-    return session;
   }
 
   Future<ParkingSession?> loadActiveSession() async {
+    final version = _version;
+    final userId = service.currentUserId;
     final session = await service.getActiveSession();
-    sessionState.setActiveSession(session);
+    if (version == _version &&
+        userId == service.currentUserId &&
+        _busyVersion == null) {
+      sessionState.setActiveSession(session);
+    }
     return session;
   }
 
   Future<ParkingSession> changePickupTime({
     required String sessionId,
     required DateTime pickupTime,
+    String parkingName = 'Parking stay',
   }) async {
-    final session = await service.changePickupTime(
-      sessionId: sessionId,
-      pickupTime: pickupTime,
+    return _change(
+      () => service.changePickupTime(
+        sessionId: sessionId,
+        pickupTime: pickupTime,
+        parkingName: parkingName,
+      ),
     );
-
-    sessionState.setActiveSession(session);
-    return session;
   }
 
   Future<ParkingSession> endParking({
     required String sessionId,
     String parkingName = 'Parking stay',
   }) async {
-    final session = await service.endParking(
-      sessionId: sessionId,
-      parkingName: parkingName,
+    return _change(
+      () => service.endParking(sessionId: sessionId, parkingName: parkingName),
     );
-    sessionState.clearSession();
-    return session;
   }
 
   Future<bool> hasActiveSession() {

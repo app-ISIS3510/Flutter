@@ -101,7 +101,7 @@ void main() {
           throw StateError('Unexpected request: ${request.url.path}');
         }
         return http.Response(
-          jsonEncode(completedSession()),
+          jsonEncode([completedSession()]),
           200,
           request: request,
           headers: {'content-type': 'application/json'},

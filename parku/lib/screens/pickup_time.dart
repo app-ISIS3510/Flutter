@@ -7,6 +7,7 @@ import '../services/driving_restriction_service.dart';
 import '../widgets/design_icon.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/pickup_widgets.dart';
+import 'profile/profile_widgets.dart';
 
 class PickupTimeScreen extends StatefulWidget {
   final ValueChanged<int> onNavTap;
@@ -17,6 +18,10 @@ class PickupTimeScreen extends StatefulWidget {
   final String openingTime;
   final String closingTime;
   final DateTime Function()? currentTime;
+  final String? initialTime;
+  final void Function(String, Vehicle)? onDraftChanged;
+  final VoidCallback? onCheckStatus;
+  final String? notice;
 
   const PickupTimeScreen({
     super.key,
@@ -27,6 +32,10 @@ class PickupTimeScreen extends StatefulWidget {
     required this.openingTime,
     required this.closingTime,
     this.currentTime,
+    this.initialTime,
+    this.onDraftChanged,
+    this.onCheckStatus,
+    this.notice,
   });
 
   @override
@@ -38,6 +47,7 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
   Vehicle? selectedVehicle;
 
   bool isStartingParking = false;
+  bool _requestFailed = false;
 
   late List<String> availableTimes;
 
@@ -48,7 +58,9 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
     selectedVehicle = widget.vehicle;
     availableTimes = _generateAvailableTimes();
 
-    if (availableTimes.isNotEmpty) {
+    if (availableTimes.contains(widget.initialTime)) {
+      selectedTime = widget.initialTime;
+    } else if (availableTimes.isNotEmpty) {
       selectedTime = availableTimes.first;
     }
   }
@@ -161,6 +173,7 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
       await widget.onStartParking(time, vehicle);
     } catch (error) {
       if (!mounted) return;
+      setState(() => _requestFailed = true);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(SessionController.messageFor(error))),
@@ -267,6 +280,11 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
 
                     const SizedBox(height: 16),
 
+                    if (widget.notice != null) ...[
+                      ProfileNotice(widget.notice!),
+                      const SizedBox(height: 16),
+                    ],
+
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -323,6 +341,12 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
                               final vehicle = await widget.onChangeVehicle();
                               if (mounted) {
                                 setState(() => selectedVehicle = vehicle);
+                                if (selectedTime != null && vehicle != null) {
+                                  widget.onDraftChanged?.call(
+                                    selectedTime!,
+                                    vehicle,
+                                  );
+                                }
                               }
                             },
                           ),
@@ -388,15 +412,23 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
                                       child: Text(_formatTime(time)),
                                     );
                                   }).toList(),
-                                  onChanged: (value) {
-                                    if (value == null) {
-                                      return;
-                                    }
+                                  onChanged: isStartingParking
+                                      ? null
+                                      : (value) {
+                                          if (value == null) {
+                                            return;
+                                          }
 
-                                    setState(() {
-                                      selectedTime = value;
-                                    });
-                                  },
+                                          setState(() {
+                                            selectedTime = value;
+                                          });
+                                          if (selectedVehicle != null) {
+                                            widget.onDraftChanged?.call(
+                                              value,
+                                              selectedVehicle!,
+                                            );
+                                          }
+                                        },
                                 ),
                               ),
                             ),
@@ -450,6 +482,19 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
                     ),
 
                     const SizedBox(height: 16),
+
+                    if ((_requestFailed || widget.notice != null) &&
+                        widget.onCheckStatus != null) ...[
+                      PickupButton(
+                        text: 'Check My parking',
+                        background: AppColors.white,
+                        foreground: AppColors.primary,
+                        onPressed: isStartingParking
+                            ? null
+                            : widget.onCheckStatus,
+                      ),
+                      const SizedBox(height: 16),
+                    ],
 
                     const Text(
                       'You can change this time whenever you need.',

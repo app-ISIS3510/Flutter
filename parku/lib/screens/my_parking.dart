@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import 'end_parking.dart';
 import '../controllers/navigation_controller.dart';
+import 'profile/profile_widgets.dart';
 
 class MyParkingScreen extends StatefulWidget {
   final int currentIndex;
@@ -18,6 +19,8 @@ class MyParkingScreen extends StatefulWidget {
 
   final ParkingSession session;
   final Parking parking;
+  final String? notice;
+  final VoidCallback? onRefresh;
 
   const MyParkingScreen({
     super.key,
@@ -28,6 +31,8 @@ class MyParkingScreen extends StatefulWidget {
     required this.parking,
     required this.navigationController,
     this.onChangePickupTime,
+    this.notice,
+    this.onRefresh,
   });
 
   @override
@@ -163,14 +168,31 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'My parking',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.darkText,
-                      ),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'My parking',
+                            style: TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.darkText,
+                            ),
+                          ),
+                        ),
+                        if (widget.onRefresh != null)
+                          IconButton(
+                            onPressed: widget.onRefresh,
+                            tooltip: 'Refresh parking status',
+                            icon: const Icon(Icons.refresh),
+                          ),
+                      ],
                     ),
+
+                    if (widget.notice != null) ...[
+                      const SizedBox(height: 16),
+                      ProfileNotice(widget.notice!, onRetry: widget.onRefresh),
+                    ],
 
                     const SizedBox(height: 30),
 
