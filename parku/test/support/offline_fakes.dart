@@ -136,6 +136,7 @@ class UnstableSessionRepository extends SessionRepository {
   int starts = 0;
   int changes = 0;
   int ends = 0;
+  int activeReads = 0;
   final sessions = <ParkingSession>[];
   Completer<void>? startGate;
   final startReceived = Completer<void>();
@@ -158,6 +159,7 @@ class UnstableSessionRepository extends SessionRepository {
 
   @override
   Future<ParkingSession?> getActiveSession() async {
+    activeReads++;
     _read();
     if (activeReply != null) return activeReply!.future;
     for (final session in sessions) {

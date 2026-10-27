@@ -42,6 +42,7 @@ class HomeScreen extends StatelessWidget {
       'pricePerMinute': parking.pricePerMinute.toString(),
       'openingTime': parking.openingTime ?? '',
       'closingTime': parking.closingTime ?? '',
+      'imageUrl': parking.imageUrl ?? '',
     };
   }
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../controllers/analytics_controller.dart';
@@ -9,6 +10,7 @@ import '../controllers/navigation_controller.dart';
 import '../controllers/parking_controller.dart';
 import '../controllers/profile_controller.dart';
 import '../controllers/session_controller.dart';
+import '../controllers/connection_controller.dart';
 import '../models/parking.dart';
 import '../models/parking_session.dart';
 import '../models/vehicle.dart';
@@ -49,19 +51,24 @@ class MainNavigationScreen extends StatefulWidget {
   final VoidCallback? onSignedOut;
   final ProfileService? profileService;
   final SessionService? sessionService;
+  final Stream<List<ConnectivityResult>>? connectionChanges;
+  final Future<List<ConnectivityResult>> Function()? checkConnection;
 
   const MainNavigationScreen({
     super.key,
     this.onSignedOut,
     this.profileService,
     this.sessionService,
+    this.connectionChanges,
+    this.checkConnection,
   });
 
   @override
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
-class _MainNavigationScreenState extends State<MainNavigationScreen> {
+class _MainNavigationScreenState extends State<MainNavigationScreen>
+    with WidgetsBindingObserver {
   late final ParkingRepository parkingRepository;
   late final ParkingService parkingService;
   late final ParkingController parkingController;
@@ -88,6 +95,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   late final ProfileController profileController;
   late final UserLocalStore localStore;
+  late final ConnectionController connection;
+  String? _lastConnectionNotice;
   StreamSubscription<AuthState>? _authSubscription;
   String? _userId;
 
@@ -189,10 +198,91 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         profileController.load();
       }
     });
+
+    connection = ConnectionController(
+      onReconnect: _refreshAfterReconnect,
+      changes: widget.connectionChanges,
+      checkConnection: widget.checkConnection,
+    );
+    connection.addListener(_showConnectionNotice);
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(connection.start());
+    });
+  }
+
+  Future<void> _refreshAfterReconnect() async {
+    final owner = _userId;
+    if (owner == null) return;
+    if (profileController.busy ||
+        profileController.loading ||
+        sessionController.busy) {
+      throw const ConnectionFailure(
+        'A request is still in progress. Refresh your information when it finishes.',
+      );
+    }
+
+    await profileController.load();
+    if (!mounted || owner != _userId) return;
+    Object? sessionError;
+    try {
+      await sessionController.loadActiveSession();
+    } catch (error) {
+      sessionError = error;
+    }
+    if (!mounted || owner != _userId) return;
+    if (showingMyParking) {
+      setState(() {
+        _sessionError = sessionError == null
+            ? null
+            : SessionController.messageFor(sessionError);
+        _sessionParking = null;
+        _sessionParkingId = null;
+      });
+    }
+    if (sessionError != null ||
+        profileController.error != null ||
+        profileController.usingSavedData ||
+        sessionService.usingSavedSession) {
+      throw const ConnectionFailure(
+        'The network is available, but some information could not be confirmed with the server. Refresh to retry.',
+      );
+    }
+    if (sessionService.pendingRequest != null ||
+        profileController.pendingChange != null) {
+      throw const ConnectionFailure(
+        'A previous request is still unconfirmed. Check your information before retrying it.',
+      );
+    }
+  }
+
+  void _showConnectionNotice() {
+    final message = connection.notice;
+    if (!mounted || message == _lastConnectionNotice) return;
+    _lastConnectionNotice = message;
+    if (message == null || connection.checking) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 90),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(connection.recheck(refresh: true));
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    connection.removeListener(_showConnectionNotice);
+    connection.dispose();
     _authSubscription?.cancel();
     profileController.dispose();
     sessionController.dispose();
@@ -317,6 +407,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         'longitude': double.tryParse(parking['longitude'] ?? ''),
         'opening_time': parking['openingTime'],
         'closing_time': parking['closingTime'],
+        'image_url': parking['imageUrl'],
         'price_per_minute':
             double.tryParse(parking['pricePerMinute'] ?? '') ?? 0,
       }),

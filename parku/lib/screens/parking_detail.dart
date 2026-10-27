@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import '../controllers/navigation_controller.dart';
 import '../controllers/analytics_controller.dart';
+import '../widgets/parking_photo.dart';
 
 class ParkingDetailScreen extends StatefulWidget {
   final Map<String, String> parking;
@@ -194,12 +195,7 @@ class _ParkingDetailScreenState extends State<ParkingDetailScreen> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(20),
-                          child: Image.asset(
-                            'assets/images/cityuimage.png',
-                            width: double.infinity,
-                            height: 150,
-                            fit: BoxFit.cover,
-                          ),
+                          child: ParkingPhoto(imageUrl: widget.parking['imageUrl']),
                         ),
                         Positioned(
                           top: 10,

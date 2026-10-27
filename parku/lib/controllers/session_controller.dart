@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/parking_session.dart';
@@ -34,6 +36,10 @@ class SessionController {
   final SessionState sessionState;
   int _version = 0;
   int? _busyVersion;
+  Future<ParkingSession?>? _loading;
+  int? _loadingVersion;
+  String? _loadingUser;
+  bool get busy => _busyVersion != null;
 
   SessionController(this.service, this.sessionState);
 
@@ -92,9 +98,35 @@ class SessionController {
     );
   }
 
-  Future<ParkingSession?> loadActiveSession() async {
+  Future<ParkingSession?> loadActiveSession() {
     final version = _version;
     final userId = service.currentUserId;
+    if (_loading != null &&
+        _loadingVersion == version &&
+        _loadingUser == userId) {
+      return _loading!;
+    }
+    final request = _loadActiveSession(version, userId);
+    _loading = request;
+    _loadingVersion = version;
+    _loadingUser = userId;
+    void finished() {
+      if (identical(_loading, request)) _loading = null;
+    }
+
+    unawaited(
+      request.then<void>(
+        (_) => finished(),
+        onError: (Object _, StackTrace _) => finished(),
+      ),
+    );
+    return request;
+  }
+
+  Future<ParkingSession?> _loadActiveSession(
+    int version,
+    String? userId,
+  ) async {
     final session = await service.getActiveSession();
     if (version == _version &&
         userId == service.currentUserId &&

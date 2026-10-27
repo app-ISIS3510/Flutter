@@ -9,6 +9,7 @@ class Parking {
   final double pricePerMinute;
   final String? openingTime;
   final String? closingTime;
+  final String? imageUrl;
   final int availableCarSpaces;
   final int availableMotorcycleSpaces;
 
@@ -23,6 +24,7 @@ class Parking {
     required this.pricePerMinute,
     this.openingTime,
     this.closingTime,
+    this.imageUrl,
     required this.availableCarSpaces,
     required this.availableMotorcycleSpaces,
   });
@@ -39,6 +41,7 @@ class Parking {
       pricePerMinute: (map['price_per_minute'] as num?)?.toDouble() ?? 0,
       openingTime: map['opening_time']?.toString(),
       closingTime: map['closing_time']?.toString(),
+      imageUrl: map['image_url'] as String?,
       availableCarSpaces:
           map['available_car_spaces'] as int? ?? map['car_spaces'] as int? ?? 0,
 
@@ -60,6 +63,7 @@ class Parking {
     'price_per_minute': pricePerMinute,
     'opening_time': openingTime,
     'closing_time': closingTime,
+    'image_url': imageUrl,
     'available_car_spaces': availableCarSpaces,
     'available_motorcycle_spaces': availableMotorcycleSpaces,
   };

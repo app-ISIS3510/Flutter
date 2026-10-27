@@ -168,6 +168,7 @@ class ParkingListScreen extends StatelessWidget {
                             : () {
                                 onSelectParking!({
                                   'id': parking.id,
+                                  'imageUrl': parking.imageUrl ?? '',
                                   'name': parking.name,
                                   'address': parking.address,
                                   'latitude': parking.latitude?.toString() ?? '', 

@@ -25,6 +25,7 @@ class SessionService {
   bool recoveredRequest = false;
   Map<String, dynamic>? pendingRequest;
   final _inFlight = <String, Future<ParkingSession>>{};
+  int _stateVersion = 0;
 
   SessionService(
     this.repository, {
@@ -61,6 +62,7 @@ class SessionService {
   }
 
   void clear() {
+    _stateVersion++;
     pendingRequest = null;
     usingSavedSession = false;
     recoveredRequest = false;
@@ -152,6 +154,7 @@ class SessionService {
     bool recovered = false,
   }) async {
     _checkUser(owner);
+    _stateVersion++;
     await _remember(session, owner);
     if (session.status == 'completed') {
       await _saveSummary(
@@ -338,6 +341,7 @@ class SessionService {
     String parkingName = 'Parking stay',
   }) async {
     final owner = _userId();
+    _stateVersion++;
     recoveredRequest = false;
     final request = <String, dynamic>{
       'kind': 'start',
@@ -390,10 +394,12 @@ class SessionService {
     try {
       pendingRequest = await store?.read('session_request');
       if (pendingRequest != null) await _recover(pendingRequest!, owner);
+      final version = _stateVersion;
       final session = await repository.getActiveSession().timeout(
         requestTimeout,
       );
-      await _remember(session, owner);
+      _checkUser(owner);
+      if (version == _stateVersion) await _remember(session, owner);
       return session;
     } catch (error) {
       if (!isConnectionError(error) || store == null) rethrow;
@@ -428,6 +434,7 @@ class SessionService {
     String parkingName = 'Parking stay',
   }) async {
     final owner = _userId();
+    _stateVersion++;
     recoveredRequest = false;
     final request = <String, dynamic>{
       'kind': 'change',
@@ -478,6 +485,7 @@ class SessionService {
     String parkingName = 'Parking stay',
   }) async {
     final owner = _userId();
+    _stateVersion++;
     recoveredRequest = false;
     historySaveFailed = false;
     final request = <String, dynamic>{
