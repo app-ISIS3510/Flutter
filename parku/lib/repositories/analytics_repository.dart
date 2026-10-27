@@ -5,6 +5,17 @@ class AnalyticsRepository {
 
   AnalyticsRepository(this.client);
 
+  String? get userId => client.auth.currentUser?.id;
+
+  Future<void> savePickupChoice(Map<String, dynamic> event) async {
+    if (userId != event['user_id']) {
+      throw const AuthException('The signed-in account has changed.');
+    }
+    await client
+        .from('analytics_events')
+        .upsert(event, onConflict: 'id', ignoreDuplicates: true);
+  }
+
   Future<void> trackEvent({
     required String eventType,
     String? screen,

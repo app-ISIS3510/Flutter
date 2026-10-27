@@ -22,6 +22,7 @@ class PickupTimeScreen extends StatefulWidget {
   final void Function(String, Vehicle)? onDraftChanged;
   final VoidCallback? onCheckStatus;
   final String? notice;
+  final ValueChanged<String>? onSuggestionReady;
 
   const PickupTimeScreen({
     super.key,
@@ -36,6 +37,7 @@ class PickupTimeScreen extends StatefulWidget {
     this.onDraftChanged,
     this.onCheckStatus,
     this.notice,
+    this.onSuggestionReady,
   });
 
   @override
@@ -57,6 +59,9 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
 
     selectedVehicle = widget.vehicle;
     availableTimes = _generateAvailableTimes();
+    if (availableTimes.isNotEmpty) {
+      widget.onSuggestionReady?.call(availableTimes.first);
+    }
 
     if (availableTimes.contains(widget.initialTime)) {
       selectedTime = widget.initialTime;
@@ -379,6 +384,14 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
                     const SizedBox(height: 16),
 
                     if (hasAvailableTimes) ...[
+                      Text(
+                        'Suggested pickup time: ${_formatTime(availableTimes.first)}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.greyText,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),

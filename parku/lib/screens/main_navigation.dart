@@ -30,6 +30,7 @@ import '../services/profile_service.dart';
 import '../services/session_service.dart';
 import '../services/shared_dashboard_service.dart';
 import '../services/connection_failure.dart';
+import '../services/pickup_analytics_service.dart';
 import '../state/session_state.dart';
 import 'change_pickup_time.dart';
 import 'favorites.dart';
@@ -88,6 +89,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   late final AnalyticsRepository analyticsRepository;
   late final AnalyticsService analyticsService;
   late final AnalyticsController analyticsController;
+  late final PickupAnalyticsService pickupAnalytics;
 
   final sharedDashboardService = SharedDashboardService();
 
@@ -124,6 +126,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
     final supabase = Supabase.instance.client;
     localStore = UserLocalStore(supabase);
+    analyticsRepository = AnalyticsRepository(supabase);
+    pickupAnalytics = PickupAnalyticsService(
+      analyticsRepository,
+      widget.sessionService?.store ??
+          widget.profileService?.store ??
+          localStore,
+    );
     final personalData = PersonalDataRepository();
 
     parkingRepository = ParkingRepository(supabase);
@@ -138,6 +147,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           sessionRepository,
           store: localStore,
           local: personalData,
+          pickupAnalytics: pickupAnalytics,
         );
     sessionState = SessionState();
     sessionController = SessionController(sessionService, sessionState);
@@ -149,7 +159,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     navigationService = NavigationService.create();
     navigationController = NavigationController(navigationService);
 
-    analyticsRepository = AnalyticsRepository(supabase);
     analyticsService = AnalyticsService(analyticsRepository);
     analyticsController = AnalyticsController(analyticsService);
 
@@ -214,6 +223,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   Future<void> _refreshAfterReconnect() async {
     final owner = _userId;
     if (owner == null) return;
+    unawaited(pickupAnalytics.flush());
     if (profileController.busy ||
         profileController.loading ||
         sessionController.busy) {
@@ -600,10 +610,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         );
       }
 
+      String? suggestedTime;
       Navigator.push(
         context,
         MaterialPageRoute<void>(
           builder: (context) => PickupTimeScreen(
+            onSuggestionReady: (time) => suggestedTime = time,
             onNavTap: _profileNavTap,
             vehicle: vehicle!,
             initialTime: draft?['time'] as String?,
@@ -656,6 +668,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                 pickupTime: pickup,
                 vehicleId: chosenVehicle.id,
                 parkingName: parking['name'] ?? 'Parking stay',
+                suggestedPickupTime: suggestedTime == null
+                    ? null
+                    : _buildPickupDateTime(suggestedTime!),
               );
 
               stopwatch.stop();

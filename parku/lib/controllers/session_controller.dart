@@ -87,6 +87,7 @@ class SessionController {
     required DateTime pickupTime,
     required String vehicleId,
     String parkingName = 'Parking stay',
+    DateTime? suggestedPickupTime,
   }) async {
     return _change(
       () => service.startParking(
@@ -94,6 +95,7 @@ class SessionController {
         pickupTime: pickupTime,
         vehicleId: vehicleId,
         parkingName: parkingName,
+        suggestedPickupTime: suggestedPickupTime,
       ),
     );
   }

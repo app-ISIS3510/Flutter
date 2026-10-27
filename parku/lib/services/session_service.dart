@@ -12,12 +12,14 @@ import '../repositories/session_repository.dart';
 import '../repositories/user_local_store.dart';
 import '../repositories/personal_data_repository.dart';
 import 'connection_failure.dart';
+import 'pickup_analytics_service.dart';
 
 class SessionService {
   final SessionRepository repository;
   final SessionHistoryRepository historyRepository;
   final UserLocalStore? store;
   final PersonalDataRepository? local;
+  final PickupAnalyticsService? pickupAnalytics;
   final Duration requestTimeout;
   bool historySaveFailed = false;
   bool localSaveFailed = false;
@@ -32,6 +34,7 @@ class SessionService {
     SessionHistoryRepository? historyRepository,
     this.store,
     this.local,
+    this.pickupAnalytics,
     this.requestTimeout = const Duration(seconds: 8),
   }) : historyRepository =
            historyRepository ?? SessionHistoryRepository(repository.client);
@@ -156,6 +159,10 @@ class SessionService {
     _checkUser(owner);
     _stateVersion++;
     await _remember(session, owner);
+    if (request['kind'] == 'start') {
+      await pickupAnalytics?.saveChoice(session, request);
+      _checkUser(owner);
+    }
     if (session.status == 'completed') {
       await _saveSummary(
         session,
@@ -339,6 +346,7 @@ class SessionService {
     required DateTime pickupTime,
     required String vehicleId,
     String parkingName = 'Parking stay',
+    DateTime? suggestedPickupTime,
   }) async {
     final owner = _userId();
     _stateVersion++;
@@ -349,6 +357,8 @@ class SessionService {
       'vehicle_id': vehicleId,
       'pickup_time': pickupTime.toUtc().toIso8601String(),
       'parking_name': parkingName,
+      if (suggestedPickupTime != null)
+        'suggested_pickup_time': suggestedPickupTime.toUtc().toIso8601String(),
     };
     if (store != null) {
       final confirmed = await _checkPending(request, owner);
@@ -374,6 +384,12 @@ class SessionService {
         request['known_ids'] = known.map((session) => session.id).toList();
       } else {
         request['known_ids'] = pendingRequest!['known_ids'];
+        if (pendingRequest!.containsKey('suggested_pickup_time')) {
+          request['suggested_pickup_time'] =
+              pendingRequest!['suggested_pickup_time'];
+        } else {
+          request.remove('suggested_pickup_time');
+        }
       }
     }
     return _send(
