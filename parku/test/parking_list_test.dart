@@ -41,6 +41,14 @@ void main() {
       'test-key',
       authOptions: const AuthClientOptions(autoRefreshToken: false),
       httpClient: MockClient((request) async {
+        if (request.url.path ==
+            '/rest/v1/bq2_top_parking_completed_last_7_days') {
+          return http.Response(
+            '[]',
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
         requests++;
         if (!online) throw http.ClientException('No connection');
         await pendingResponse?.future;
@@ -171,6 +179,7 @@ void main() {
   ) async {
     online = false;
     await openList(tester, size: const Size(320, 568));
+    await tester.pump(const Duration(seconds: 13));
     await tester.pumpAndSettle();
     await scrollTo(tester, find.text('Try again'), 200);
     expect(find.text('Try again').hitTestable(), findsOneWidget);

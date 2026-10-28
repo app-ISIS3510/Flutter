@@ -506,7 +506,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           .catchError((Object _) {}),
     );
 
-    bool isFavorite = await favoriteController.isFavorite(parkingId);
+    bool isFavorite;
+    try {
+      isFavorite = await favoriteController
+          .isFavorite(parkingId)
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {
+      _showRequestError(
+        const ConnectionFailure(
+          'Could not open this parking lot. Check your connection and try again.',
+        ),
+      );
+      return;
+    }
 
     if (!mounted) return;
 
