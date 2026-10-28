@@ -1,5 +1,5 @@
-
 import 'package:flutter/material.dart';
+
 import '../theme/app_theme.dart';
 
 class ParkingCard extends StatelessWidget {
@@ -37,10 +37,7 @@ class ParkingCard extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: isRecommended
-              ? Border.all(
-                  color: AppColors.primary,
-                  width: 1.5,
-                )
+              ? Border.all(color: AppColors.primary, width: 1.5)
               : null,
         ),
         child: Row(
@@ -77,18 +74,16 @@ class ParkingCard extends StatelessWidget {
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.star,
-                            color: AppColors.primary,
-                            size: 15,
-                          ),
+                          Icon(Icons.star, color: AppColors.primary, size: 15),
                           SizedBox(width: 5),
-                          Text(
-                            'Recommended',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.primary,
+                          Flexible(
+                            child: Text(
+                              'Recommended',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primary,
+                              ),
                             ),
                           ),
                         ],
@@ -130,12 +125,14 @@ class ParkingCard extends StatelessWidget {
                           size: 18,
                         ),
                         const SizedBox(width: 5),
-                        Text(
-                          '$distance away',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.darkText,
+                        Expanded(
+                          child: Text(
+                            '$distance away',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.darkText,
+                            ),
                           ),
                         ),
                       ],
@@ -165,8 +162,7 @@ class ParkingCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (availableSpaces != null &&
-                        totalSpaces != null) ...[
+                    if (availableSpaces != null && totalSpaces != null) ...[
                       const SizedBox(height: 6),
                       Text(
                         '$availableSpaces of $totalSpaces spaces available',
@@ -181,10 +177,7 @@ class ParkingCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6),
-            const Icon(
-              Icons.chevron_right,
-              color: AppColors.greyText,
-            ),
+            const Icon(Icons.chevron_right, color: AppColors.greyText),
           ],
         ),
       ),

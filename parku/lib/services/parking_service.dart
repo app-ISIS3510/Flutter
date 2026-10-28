@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:geolocator/geolocator.dart';
 
 import '../models/parking.dart';
 import '../models/parking_option.dart';
@@ -57,9 +60,7 @@ class ParkingService {
       );
     }).toList();
 
-    options.sort(
-      (a, b) => a.distanceMeters.compareTo(b.distanceMeters),
-    );
+    options.sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
 
     return options;
   }
@@ -78,7 +79,7 @@ class ParkingService {
         longitude <= 180;
   }
 
-  Future<List<SmartParkingResult>> getSmartParkingResults({
+  Future<SmartParkingResults> getSmartParkingResults({
     required int radiusMeters,
     required SmartVehicleType vehicleType,
   }) async {
@@ -86,13 +87,32 @@ class ParkingService {
       throw ArgumentError('Radius must be greater than zero.');
     }
 
-    final position = await distanceManager.getCurrentPosition();
-    final parkingLots = await repository.getParkingLots();
+    final parkingLots = await repository.getParkingLots().timeout(
+      const Duration(seconds: 12),
+    );
+    if (parkingLots.isEmpty) return const SmartParkingResults(items: []);
+
+    Position? position;
+    String? locationNotice;
+    try {
+      position = await distanceManager.getCurrentPosition();
+    } catch (error) {
+      var reason = 'Could not get your location.';
+      final message = error.toString();
+      if (message.contains('permission')) {
+        reason = 'Location permission is not enabled.';
+      } else if (message.contains('disabled')) {
+        reason = 'Location services are turned off.';
+      }
+      locationNotice =
+          '$reason Showing parking lots without distances or a '
+          'radius filter. Enable location and tap Refresh location to search nearby.';
+    }
 
     final results = <SmartParkingResult>[];
 
     for (final parking in parkingLots) {
-      if (!_hasValidCoordinates(parking)) continue;
+      if (position != null && !_hasValidCoordinates(parking)) continue;
 
       final totalSpaces = vehicleType == SmartVehicleType.car
           ? parking.carSpaces
@@ -104,14 +124,16 @@ class ParkingService {
 
       if (totalSpaces <= 0) continue;
 
-      final distance = distanceManager.calculateDistance(
-        userLatitude: position.latitude,
-        userLongitude: position.longitude,
-        parkingLatitude: parking.latitude!,
-        parkingLongitude: parking.longitude!,
-      );
-
-      if (!distance.isFinite || distance > radiusMeters) continue;
+      double? distance;
+      if (position != null) {
+        distance = distanceManager.calculateDistance(
+          userLatitude: position.latitude,
+          userLongitude: position.longitude,
+          parkingLatitude: parking.latitude!,
+          parkingLongitude: parking.longitude!,
+        );
+        if (!distance.isFinite || distance > radiusMeters) continue;
+      }
 
       final validAvailable = availableSpaces.clamp(0, totalSpaces).toInt();
 
@@ -130,15 +152,18 @@ class ParkingService {
     }
 
     results.sort((a, b) {
-      final availabilityComparison =
-          b.availabilityPercentage.compareTo(a.availabilityPercentage);
+      if (position == null) {
+        return a.parking.name.compareTo(b.parking.name);
+      }
+      final availabilityComparison = b.availabilityPercentage.compareTo(
+        a.availabilityPercentage,
+      );
 
       if (availabilityComparison != 0) {
         return availabilityComparison;
       }
 
-      final distanceComparison =
-          a.distanceMeters.compareTo(b.distanceMeters);
+      final distanceComparison = a.distanceMeters!.compareTo(b.distanceMeters!);
 
       if (distanceComparison != 0) {
         return distanceComparison;
@@ -147,18 +172,20 @@ class ParkingService {
       return a.parking.id.compareTo(b.parking.id);
     });
 
-    if (results.isEmpty) return [];
-
-    return [
-      for (var i = 0; i < results.length; i++)
-        SmartParkingResult(
-          parking: results[i].parking,
-          distanceMeters: results[i].distanceMeters,
-          availabilityPercentage: results[i].availabilityPercentage,
-          availableSpaces: results[i].availableSpaces,
-          totalSpaces: results[i].totalSpaces,
-          isRecommended: i == 0,
-        ),
-    ];
+    return SmartParkingResults(
+      locationNotice: locationNotice,
+      items: [
+        for (var i = 0; i < results.length; i++)
+          SmartParkingResult(
+            parking: results[i].parking,
+            distanceMeters: results[i].distanceMeters,
+            availabilityPercentage: results[i].availabilityPercentage,
+            availableSpaces: results[i].availableSpaces,
+            totalSpaces: results[i].totalSpaces,
+            isRecommended:
+                position != null && i == 0 && results[i].availableSpaces > 0,
+          ),
+      ],
+    );
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -26,15 +27,14 @@ class ParkingListScreen extends StatefulWidget {
   });
 
   @override
-  State<ParkingListScreen> createState() =>
-      _ParkingListScreenState();
+  State<ParkingListScreen> createState() => _ParkingListScreenState();
 }
 
 class _ParkingListScreenState extends State<ParkingListScreen> {
   int _selectedRadius = 1000;
   SmartVehicleType _selectedVehicle = SmartVehicleType.car;
 
-  late Future<List<SmartParkingResult>> _resultsFuture;
+  late Future<SmartParkingResults> _resultsFuture;
 
   @override
   void initState() {
@@ -82,31 +82,26 @@ class _ParkingListScreenState extends State<ParkingListScreen> {
       'latitude': parking.latitude?.toString() ?? '',
       'longitude': parking.longitude?.toString() ?? '',
       'carSpaces': parking.availableCarSpaces.toString(),
-      'motorcycleSpaces':
-          parking.availableMotorcycleSpaces.toString(),
+      'motorcycleSpaces': parking.availableMotorcycleSpaces.toString(),
       'pricePerMinute': parking.pricePerMinute.toString(),
       'openingTime': parking.openingTime ?? '',
       'closingTime': parking.closingTime ?? '',
     };
   }
 
-  Widget _buildRadiusButton(int radius, String label) {
+  Widget _buildRadiusButton(int radius, String label, bool loading) {
     final selected = _selectedRadius == radius;
 
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.only(right: 8),
         child: OutlinedButton(
-          onPressed: () => _changeRadius(radius),
+          onPressed: loading ? null : () => _changeRadius(radius),
           style: OutlinedButton.styleFrom(
-            backgroundColor:
-                selected ? AppColors.primary : Colors.white,
-            foregroundColor:
-                selected ? Colors.white : AppColors.primary,
+            backgroundColor: selected ? AppColors.primary : Colors.white,
+            foregroundColor: selected ? Colors.white : AppColors.primary,
             side: BorderSide(
-              color: selected
-                  ? AppColors.primary
-                  : AppColors.lightPurple,
+              color: selected ? AppColors.primary : AppColors.lightPurple,
             ),
             padding: const EdgeInsets.symmetric(vertical: 14),
             shape: RoundedRectangleBorder(
@@ -115,10 +110,7 @@ class _ParkingListScreenState extends State<ParkingListScreen> {
           ),
           child: Text(
             label,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           ),
         ),
       ),
@@ -129,6 +121,7 @@ class _ParkingListScreenState extends State<ParkingListScreen> {
     SmartVehicleType vehicle,
     String label,
     IconData icon,
+    bool loading,
   ) {
     final selected = _selectedVehicle == vehicle;
 
@@ -136,18 +129,14 @@ class _ParkingListScreenState extends State<ParkingListScreen> {
       child: Padding(
         padding: const EdgeInsets.only(right: 8),
         child: OutlinedButton.icon(
-          onPressed: () => _changeVehicle(vehicle),
+          onPressed: loading ? null : () => _changeVehicle(vehicle),
           icon: Icon(icon, size: 19),
           label: Text(label),
           style: OutlinedButton.styleFrom(
-            backgroundColor:
-                selected ? AppColors.primary : Colors.white,
-            foregroundColor:
-                selected ? Colors.white : AppColors.primary,
+            backgroundColor: selected ? AppColors.primary : Colors.white,
+            foregroundColor: selected ? Colors.white : AppColors.primary,
             side: BorderSide(
-              color: selected
-                  ? AppColors.primary
-                  : AppColors.lightPurple,
+              color: selected ? AppColors.primary : AppColors.lightPurple,
             ),
             padding: const EdgeInsets.symmetric(vertical: 14),
             shape: RoundedRectangleBorder(
@@ -159,7 +148,7 @@ class _ParkingListScreenState extends State<ParkingListScreen> {
     );
   }
 
-  Widget _buildFilters() {
+  Widget _buildFilters(bool loading) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Column(
@@ -180,11 +169,13 @@ class _ParkingListScreenState extends State<ParkingListScreen> {
                 SmartVehicleType.car,
                 'Car',
                 Icons.directions_car,
+                loading,
               ),
               _buildVehicleButton(
                 SmartVehicleType.motorcycle,
                 'Motorcycle',
                 Icons.two_wheeler,
+                loading,
               ),
             ],
           ),
@@ -200,30 +191,23 @@ class _ParkingListScreenState extends State<ParkingListScreen> {
           const SizedBox(height: 10),
           Row(
             children: [
-              _buildRadiusButton(500, '500 m'),
-              _buildRadiusButton(1000, '1 km'),
-              _buildRadiusButton(2000, '2 km'),
+              _buildRadiusButton(500, '500 m', loading),
+              _buildRadiusButton(1000, '1 km', loading),
+              _buildRadiusButton(2000, '2 km', loading),
             ],
           ),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: _refreshLocation,
-              icon: const Icon(
-                Icons.my_location,
-                size: 20,
-              ),
+              onPressed: loading ? null : _refreshLocation,
+              icon: const Icon(Icons.my_location, size: 20),
               label: const Text('Refresh location'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primary,
                 backgroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 15,
-                ),
-                side: const BorderSide(
-                  color: AppColors.lightPurple,
-                ),
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                side: const BorderSide(color: AppColors.lightPurple),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
@@ -235,60 +219,147 @@ class _ParkingListScreenState extends State<ParkingListScreen> {
     );
   }
 
-  Widget _buildParkingResults(
-    List<SmartParkingResult> results,
-  ) {
-    if (results.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Text(
-            'No parking lots found within the selected radius.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 16,
-              color: AppColors.greyText,
+  Widget _buildParkingCard(SmartParkingResult result) {
+    final parking = result.parking;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: ParkingCard(
+        name: parking.name,
+        address: parking.address,
+        type: _selectedVehicle == SmartVehicleType.car
+            ? '${result.totalSpaces} car spaces'
+            : '${result.totalSpaces} motorcycle spaces',
+        distance: result.formattedDistance,
+        availabilityPercentage: result.availabilityPercentage,
+        availableSpaces: result.availableSpaces,
+        totalSpaces: result.totalSpaces,
+        isRecommended: result.isRecommended,
+        onTap: widget.onSelectParking == null
+            ? null
+            : () => widget.onSelectParking!(_parkingToMap(parking)),
+      ),
+    );
+  }
+
+  Widget _buildHeader(bool loading, String? locationNotice) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(32, 22, 32, 18),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Parking lots',
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w700,
+                color: AppColors.darkText,
+              ),
             ),
           ),
         ),
-      );
-    }
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: InkWell(
+            onTap: widget.onSearchTap,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              height: 58,
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.search, color: AppColors.greyText, size: 25),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Search parking lots',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 16, color: AppColors.greyText),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 32),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Find a place to park',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.darkText,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildFilters(loading),
+        if (locationNotice != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(32, 16, 32, 0),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.lightPurple,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                locationNotice,
+                style: const TextStyle(color: AppColors.darkText, fontSize: 13),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(
-        32,
-        12,
-        32,
-        20,
+  Widget _buildError(Object? error) {
+    final message = error is TimeoutException
+        ? 'The server took too long to respond. Please try again.'
+        : 'Check your internet connection and try again.';
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.cloud_off_outlined,
+            size: 40,
+            color: AppColors.primary,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Unable to load parking lots.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: AppColors.darkText,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 13, color: AppColors.greyText),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: _refreshLocation,
+            child: const Text('Try again'),
+          ),
+        ],
       ),
-      itemCount: results.length,
-      separatorBuilder: (context, index) =>
-          const SizedBox(height: 14),
-      itemBuilder: (context, index) {
-        final result = results[index];
-        final parking = result.parking;
-
-        return ParkingCard(
-          name: parking.name,
-          address: parking.address,
-          type: _selectedVehicle == SmartVehicleType.car
-              ? '${parking.carSpaces} car spaces'
-              : '${parking.motorcycleSpaces} motorcycle spaces',
-          distance: result.formattedDistance,
-          availabilityPercentage:
-              result.availabilityPercentage,
-          availableSpaces: result.availableSpaces,
-          totalSpaces: result.totalSpaces,
-          isRecommended: result.isRecommended,
-          onTap: widget.onSelectParking == null
-              ? null
-              : () {
-                  widget.onSelectParking!(
-                    _parkingToMap(parking),
-                  );
-                },
-        );
-      },
     );
   }
 
@@ -299,149 +370,57 @@ class _ParkingListScreenState extends State<ParkingListScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(
-                32,
-                22,
-                32,
-                18,
-              ),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Parking lots',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.darkText,
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 32,
-              ),
-              child: InkWell(
-                onTap: widget.onSearchTap,
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  height: 58,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(
-                        Icons.search,
-                        color: AppColors.greyText,
-                        size: 25,
-                      ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Search parking lots',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: AppColors.greyText,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: 32,
-              ),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Find a place to park',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.darkText,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildFilters(),
-            const SizedBox(height: 12),
             Expanded(
-              child: FutureBuilder<List<SmartParkingResult>>(
+              child: FutureBuilder<SmartParkingResults>(
                 future: _resultsFuture,
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState ==
-                      ConnectionState.waiting) {
-                    return const Center(
-                      child: CircularProgressIndicator(),
-                    );
-                  }
-
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.location_off_outlined,
-                              size: 40,
-                              color: AppColors.primary,
+                  final loading =
+                      snapshot.connectionState == ConnectionState.waiting;
+                  final data = loading ? null : snapshot.data;
+                  final results = data?.items ?? [];
+                  final showMessage =
+                      loading || snapshot.hasError || results.isEmpty;
+                  return ListView.separated(
+                    padding: const EdgeInsets.only(bottom: 20),
+                    itemCount: 1 + (showMessage ? 1 : results.length),
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 14),
+                    itemBuilder: (context, index) {
+                      if (index == 0) {
+                        return _buildHeader(loading, data?.locationNotice);
+                      }
+                      if (loading) {
+                        return const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(32),
+                            child: CircularProgressIndicator(),
+                          ),
+                        );
+                      }
+                      if (snapshot.hasError) return _buildError(snapshot.error);
+                      if (results.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Text(
+                            data?.locationNotice == null
+                                ? 'No parking lots found within the selected radius.'
+                                : 'No parking lots found for this vehicle type.',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: AppColors.greyText,
                             ),
-                            const SizedBox(height: 12),
-                            const Text(
-                              'Unable to load nearby parking lots.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.darkText,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '${snapshot.error}',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.greyText,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            TextButton(
-                              onPressed: _refreshLocation,
-                              child: const Text('Try again'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
-
-                  return _buildParkingResults(
-                    snapshot.data ?? [],
+                          ),
+                        );
+                      }
+                      return _buildParkingCard(results[index - 1]);
+                    },
                   );
                 },
               ),
             ),
             const SizedBox(height: 10),
-            NavBar(
-              currentIndex: widget.currentIndex,
-              onTap: widget.onNavTap,
-            ),
+            NavBar(currentIndex: widget.currentIndex, onTap: widget.onNavTap),
           ],
         ),
       ),

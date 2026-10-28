@@ -1,4 +1,3 @@
-
 import '../models/parking.dart';
 import '../models/parking_option.dart';
 import '../models/smart_parking_result.dart';
@@ -26,13 +25,11 @@ class ParkingController {
     return service.getNearestParkingLots(limit: limit);
   }
 
-  Future<List<ParkingOption>> loadParkingOptions({
-    VehicleType? vehicleType,
-  }) {
+  Future<List<ParkingOption>> loadParkingOptions({VehicleType? vehicleType}) {
     return service.getParkingOptions(vehicleType: vehicleType);
   }
 
-  Future<List<SmartParkingResult>> loadSmartParkingResults({
+  Future<SmartParkingResults> loadSmartParkingResults({
     required int radiusMeters,
     required SmartVehicleType vehicleType,
   }) {

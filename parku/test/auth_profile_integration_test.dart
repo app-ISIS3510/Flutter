@@ -136,6 +136,7 @@ void main() {
       parkingAvailable = true;
       await tester.tap(find.text('Parking lots'));
       await tester.pumpAndSettle();
+      final previousLocationCalls = location.positionCalls;
       await tester.tap(find.text('Search parking lots'));
       await tester.pumpAndSettle();
       expect(find.text('Availability for your car · ABC123'), findsOneWidget);
@@ -158,7 +159,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('7 estimated spaces · 70% of capacity'), findsOneWidget);
-      expect(location.positionCalls, 2);
+      expect(location.positionCalls - previousLocationCalls, 2);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     },
