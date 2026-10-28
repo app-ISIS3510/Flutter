@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 
 import '../controllers/parking_controller.dart';
 import '../models/parking.dart';
+import '../models/most_used_parking.dart';
 import '../models/smart_parking_result.dart';
 import '../services/parking_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/parking_card.dart';
+import '../widgets/most_used_parking_section.dart';
 
 class ParkingListScreen extends StatefulWidget {
   final int currentIndex;
@@ -35,11 +37,14 @@ class _ParkingListScreenState extends State<ParkingListScreen> {
   SmartVehicleType _selectedVehicle = SmartVehicleType.car;
 
   late Future<SmartParkingResults> _resultsFuture;
+  late Future<List<MostUsedParking>> _mostUsedFuture;
+  String? _openingParkingId;
 
   @override
   void initState() {
     super.initState();
     _loadResults();
+    _mostUsedFuture = widget.controller.loadMostUsedParkingLots();
   }
 
   void _loadResults() {
@@ -71,6 +76,45 @@ class _ParkingListScreenState extends State<ParkingListScreen> {
     setState(() {
       _loadResults();
     });
+  }
+
+  void _reloadMostUsed() {
+    setState(() {
+      _mostUsedFuture = widget.controller.loadMostUsedParkingLots();
+    });
+  }
+
+  Future<void> _openMostUsed(MostUsedParking selected) async {
+    if (_openingParkingId != null || widget.onSelectParking == null) return;
+    setState(() => _openingParkingId = selected.parkingId);
+    try {
+      final parking = await widget.controller
+          .loadParkingById(selected.parkingId)
+          .timeout(const Duration(seconds: 8));
+      if (!mounted) return;
+      if (parking == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'This parking lot is no longer available. Refresh the ranking.',
+            ),
+          ),
+        );
+        return;
+      }
+      widget.onSelectParking!(_parkingToMap(parking));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not open this parking lot. Check your connection and try again.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _openingParkingId = null);
+    }
   }
 
   Map<String, String> _parkingToMap(Parking parking) {
@@ -289,6 +333,15 @@ class _ParkingListScreenState extends State<ParkingListScreen> {
           ),
         ),
         const SizedBox(height: 20),
+        MostUsedParkingSection(
+          future: _mostUsedFuture,
+          onRetry: _reloadMostUsed,
+          openingParkingId: _openingParkingId,
+          onSelectParking: widget.onSelectParking == null
+              ? null
+              : _openMostUsed,
+        ),
+        const SizedBox(height: 24),
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 32),
           child: Align(

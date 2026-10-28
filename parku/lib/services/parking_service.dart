@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 
 import '../models/parking.dart';
+import '../models/most_used_parking.dart';
 import '../models/parking_option.dart';
 import '../models/smart_parking_result.dart';
 import '../models/vehicle.dart';
@@ -16,6 +17,12 @@ class ParkingService {
   final DistanceManager distanceManager;
 
   ParkingService(this.repository, this.distanceManager);
+
+  Future<List<MostUsedParking>> getMostUsedParkingLots() {
+    return repository.getMostUsedParkingLots().timeout(
+      const Duration(seconds: 8),
+    );
+  }
 
   Future<List<Parking>> getParkingLots() {
     return repository.getParkingLots();
