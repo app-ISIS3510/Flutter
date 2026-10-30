@@ -7,8 +7,15 @@ import '../widgets/pickup_widgets.dart';
 
 class NoFavoritesScreen extends StatelessWidget {
   final ValueChanged<int> onNavTap;
+  final String? storageNotice;
+  final VoidCallback? onRefresh;
 
-  const NoFavoritesScreen({super.key, required this.onNavTap});
+  const NoFavoritesScreen({
+    super.key,
+    required this.onNavTap,
+    this.storageNotice,
+    this.onRefresh,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -23,6 +30,12 @@ class NoFavoritesScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const ScreenHeader(title: 'Favorites'),
+                    if (storageNotice != null) Text(storageNotice!),
+                    if (onRefresh != null)
+                      TextButton(
+                        onPressed: onRefresh,
+                        child: const Text('Refresh favorites'),
+                      ),
                     const SizedBox(height: 97),
                     Container(
                       width: double.infinity,

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../controllers/profile_controller.dart';
+import '../../controllers/analytics_controller.dart';
+import '../../utils/screen_load_reporter.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/design_icon.dart';
 import 'edit_profile_screen.dart';
@@ -13,6 +15,7 @@ class ProfileScreen extends StatefulWidget {
   final VoidCallback onMyParking;
   final VoidCallback onSignedOut;
   final VoidCallback onAnalyticsDashboard;
+  final AnalyticsController? analytics;
   const ProfileScreen({
     super.key,
     required this.controller,
@@ -20,15 +23,18 @@ class ProfileScreen extends StatefulWidget {
     required this.onMyParking,
     required this.onAnalyticsDashboard,
     required this.onSignedOut,
+    this.analytics,
   });
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  ScreenLoadReporter? _screenLoad;
   @override
   void initState() {
     super.initState();
+    _screenLoad = ScreenLoadReporter(widget.analytics, 'profile');
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await widget.controller.load();
@@ -36,7 +42,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (!mounted) return;
 
       setState(() {});
+      _screenLoad?.presented(
+        context,
+        source: widget.controller.error == null ? 'network' : 'none',
+        failed: widget.controller.error != null,
+      );
     });
+  }
+
+  @override
+  void dispose() {
+    _screenLoad?.cancel();
+    super.dispose();
   }
 
   void _open(Widget screen) {
@@ -164,49 +181,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                  ],
+                  _menu(
+                    'profile_clock',
+                    'My parking',
+                    'Check your parking and pickup time',
+                    widget.onMyParking,
+                  ),
+                  const SizedBox(height: 16),
+                  _menu(
+                    'profile_heart',
+                    'My favorites',
+                    'Your saved parking lots',
+                    () => widget.onNavTap(2),
+                  ),
+                  const SizedBox(height: 16),
+
+                  if (controller.isAdmin) ...[
                     _menu(
                       'profile_clock',
-                      'My parking',
-                      'Check your parking and pickup time',
-                      widget.onMyParking,
+                      'Analytics dashboard',
+                      'Open shared metrics in your browser',
+                      widget.onAnalyticsDashboard,
                     ),
-                    const SizedBox(height: 16),
-                    _menu(
-                      'profile_heart',
-                      'My favorites',
-                      'Your saved parking lots',
-                      () => widget.onNavTap(2),
-                    ),
-                    const SizedBox(height: 16),
 
-                    if (controller.isAdmin) ...[
-                      _menu(
-                        'profile_clock',
-                        'Analytics dashboard',
-                        'Open shared metrics in your browser',
-                        widget.onAnalyticsDashboard,
-                      ),
-
-                      const SizedBox(height: 16),
-                    ],
-                    Text(
-                      'Everything you need to get to campus and back.',
-                      style: profileText(13, color: AppColors.greyText),
-                    ),
                     const SizedBox(height: 16),
-                    ProfileButton(
-                      text: controller.busy ? 'Signing out...' : 'Sign out',
-                      background: Colors.white,
-                      foreground: AppColors.primary,
-                      onPressed: controller.busy
-                          ? null
-                          : () async {
-                              if (await controller.signOut() && mounted) {
-                                widget.onSignedOut();
-                              }
-                            },
-                    ),
                   ],
+                  Text(
+                    'Everything you need to get to campus and back.',
+                    style: profileText(13, color: AppColors.greyText),
+                  ),
+                  const SizedBox(height: 16),
+                  ProfileButton(
+                    text: controller.busy ? 'Signing out...' : 'Sign out',
+                    background: Colors.white,
+                    foreground: AppColors.primary,
+                    onPressed: controller.busy
+                        ? null
+                        : () async {
+                            if (await controller.signOut() && mounted) {
+                              widget.onSignedOut();
+                            }
+                          },
+                  ),
                 ],
               ),
       );

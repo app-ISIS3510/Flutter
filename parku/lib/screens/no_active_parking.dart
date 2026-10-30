@@ -4,11 +4,13 @@ import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 
 class NoActiveParkingScreen extends StatelessWidget {
+  final bool isFromCache;
   final int currentIndex;
   final ValueChanged<int> onNavTap;
 
   const NoActiveParkingScreen({
     super.key,
+    this.isFromCache = false,
     required this.currentIndex,
     required this.onNavTap,
   });
@@ -55,9 +57,11 @@ class NoActiveParkingScreen extends StatelessWidget {
 
                           const SizedBox(height: 20),
 
-                          const Text(
-                            'No active parking',
-                            style: TextStyle(
+                          Text(
+                            isFromCache
+                                ? 'No active parking saved'
+                                : 'No active parking',
+                            style: const TextStyle(
                               fontSize: 27,
                               fontWeight: FontWeight.w700,
                               color: AppColors.darkText,
@@ -66,9 +70,12 @@ class NoActiveParkingScreen extends StatelessWidget {
 
                           const SizedBox(height: 12),
 
-                          const Text(
-                            'Start parking after you leave your vehicle to see how much time is left until pickup.',
-                            style: TextStyle(
+                          Text(
+                            isFromCache
+                                ? 'The last saved snapshot had no active session. '
+                                      'Reconnect to check your current server status.'
+                                : 'Start parking after you leave your vehicle to see how much time is left until pickup.',
+                            style: const TextStyle(
                               fontSize: 16,
                               height: 1.4,
                               color: AppColors.greyText,
@@ -110,10 +117,7 @@ class NoActiveParkingScreen extends StatelessWidget {
               ),
             ),
 
-            NavBar(
-              currentIndex: currentIndex,
-              onTap: onNavTap,
-            ),
+            NavBar(currentIndex: currentIndex, onTap: onNavTap),
           ],
         ),
       ),
