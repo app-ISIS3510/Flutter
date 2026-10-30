@@ -138,36 +138,42 @@ class _ParkingMapPanelState extends State<ParkingMapPanel>
   Widget _fallback(BuildContext context) {
     _screenLoad?.presented(context, source: 'none', failed: true);
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.map_outlined, size: 48, color: AppColors.primary),
-            const SizedBox(height: 16),
-            const Text(
-              'Map unavailable',
-              style: TextStyle(fontSize: 23, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              _hasNetwork == false
-                  ? 'Go online to view the map, or browse parking lots.'
-                  : 'Open the parking list to continue.',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 22),
-            FilledButton.icon(
-              onPressed: widget.onOpenParkingList,
-              icon: const Icon(Icons.list_alt_rounded),
-              label: const Text('View parking lots'),
-            ),
-            if (_hasNetwork != false)
-              TextButton(
-                onPressed: _retryMap,
-                child: const Text('Try map again'),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.map_outlined,
+                size: 48,
+                color: AppColors.primary,
               ),
-          ],
+              const SizedBox(height: 16),
+              const Text(
+                'Map unavailable',
+                style: TextStyle(fontSize: 23, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                _hasNetwork == false
+                    ? 'Go online to view the map, or browse parking lots.'
+                    : 'Open the parking list to continue.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 22),
+              FilledButton.icon(
+                onPressed: widget.onOpenParkingList,
+                icon: const Icon(Icons.list_alt_rounded),
+                label: const Text('View parking lots'),
+              ),
+              if (_hasNetwork != false)
+                TextButton(
+                  onPressed: _retryMap,
+                  child: const Text('Try map again'),
+                ),
+            ],
+          ),
         ),
       ),
     );

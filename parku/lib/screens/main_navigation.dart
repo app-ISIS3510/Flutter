@@ -449,7 +449,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
       _refreshFavorites();
     } catch (error) {
-      if (_sameUser(owner)) {
+      if (mounted && _sameUser(owner)) {
         showUserError(context, error, action: ErrorAction.favorites);
       }
     } finally {
@@ -545,12 +545,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
     unawaited(
       sessionService
-          .savePickupDraft(
-            key,
-            {'time': time, 'vehicle_id': vehicleId},
-          )
+          .savePickupDraft(key, {'time': time, 'vehicle_id': vehicleId})
           .catchError((Object _) {
-            if (_sameUser(owner)) {
+            if (mounted && _sameUser(owner)) {
               showUserMessage(
                 context,
                 'Could not save your selection on this device.',
@@ -840,16 +837,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                       'id': selectedParking.id,
                       'name': selectedParking.name,
                       'address': selectedParking.address,
-                      'latitude':
-                          selectedParking.latitude?.toString() ?? '',
-                      'longitude':
-                          selectedParking.longitude?.toString() ?? '',
-                      'carSpaces':
-                          selectedParking.availableCarSpaces.toString(),
-                      'motorcycleSpaces':
-                          selectedParking.availableMotorcycleSpaces.toString(),
-                      'pricePerMinute':
-                          selectedParking.pricePerMinute.toString(),
+                      'latitude': selectedParking.latitude?.toString() ?? '',
+                      'longitude': selectedParking.longitude?.toString() ?? '',
+                      'carSpaces': selectedParking.availableCarSpaces
+                          .toString(),
+                      'motorcycleSpaces': selectedParking
+                          .availableMotorcycleSpaces
+                          .toString(),
+                      'pricePerMinute': selectedParking.pricePerMinute
+                          .toString(),
                       'openingTime': selectedParking.openingTime ?? '',
                       'closingTime': selectedParking.closingTime ?? '',
                       'imageUrl': selectedParking.imageUrl ?? '',
@@ -875,7 +871,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
     try {
       await profileController.load();
-      if (!_sameUser(owner)) return;
+      if (!mounted || !_sameUser(owner)) return;
 
       if (profileController.error != null) {
         showUserMessage(
@@ -910,7 +906,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
       vehicle ??= await _chooseVehicle();
 
-      if (vehicle == null || !_sameUser(owner)) return;
+      if (!mounted || vehicle == null || !_sameUser(owner)) return;
 
       _track(
         eventType: 'pickup_time_viewed',
@@ -1009,7 +1005,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                 },
               );
 
-              if (!routeContext.mounted) return;
+              if (!mounted || !routeContext.mounted) return;
 
               _returnToMain();
               unawaited(openMyParking());
@@ -1055,11 +1051,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         );
       }
 
-      final draft = await sessionService.getPickupDraft(
-        'change_${session.id}',
-      );
+      final draft = await sessionService.getPickupDraft('change_${session.id}');
 
-      if (!_sameUser(owner)) return;
+      if (!mounted || !_sameUser(owner)) return;
 
       await Navigator.push<void>(
         context,
@@ -1083,10 +1077,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             onSave: (time) async {
               _requireUser(owner);
 
-              await sessionService.savePickupDraft(
-                'change_${session.id}',
-                {'time': time},
-              );
+              await sessionService.savePickupDraft('change_${session.id}', {
+                'time': time,
+              });
 
               _requireUser(owner);
               await _connection.requireConnection();
@@ -1114,9 +1107,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                 eventType: 'pickup_time_changed',
                 screen: 'change_pickup_time',
                 parkingId: session.parkingId,
-                metadata: {
-                  'new_pickup_time': pickup.toIso8601String(),
-                },
+                metadata: {'new_pickup_time': pickup.toIso8601String()},
               );
             },
           ),
@@ -1154,7 +1145,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       }
     }
 
-    if (!_sameUser(owner)) return;
+    if (!mounted || !_sameUser(owner)) return;
 
     if (sessionService.historySaveFailed) {
       showUserMessage(
@@ -1177,10 +1168,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     if (!_sameUser(owner)) return;
 
     _myParkingLoad?.cancel();
-    _myParkingLoad = ScreenLoadReporter(
-      analyticsController,
-      'my_parking',
-    );
+    _myParkingLoad = ScreenLoadReporter(analyticsController, 'my_parking');
 
     final version = ++_myParkingRequestVersion;
 
@@ -1228,11 +1216,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         final parking = details?.parking;
 
         if (snapshot.hasError || parking == null) {
-          _myParkingLoad?.presented(
-            context,
-            source: 'none',
-            failed: true,
-          );
+          _myParkingLoad?.presented(context, source: 'none', failed: true);
 
           return _loadFailure(
             'Could not load parking details. Please try again later.',
@@ -1254,10 +1238,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           session: session,
           parking: parking,
           navigationController: navigationController,
-          onEndParking: () => endParking(
-            session: session,
-            parkingName: parking.name,
-          ),
+          onEndParking: () =>
+              endParking(session: session, parkingName: parking.name),
           notice:
               sessionService.notice ??
               (details.isFromCache ? 'Using saved parking details.' : null),
@@ -1318,9 +1300,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             if (favorites.isEmpty) {
               return NoFavoritesScreen(
                 onNavTap: changePage,
-                storageNotice: storageNotice.isEmpty
-                    ? null
-                    : storageNotice,
+                storageNotice: storageNotice.isEmpty ? null : storageNotice,
                 onRefresh: _refreshFavorites,
               );
             }
@@ -1328,9 +1308,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             return FavoritesScreen(
               favorites: favorites,
               pendingRemovalIds: Set.unmodifiable(_removingFavoriteIds),
-              storageNotice: storageNotice.isEmpty
-                  ? null
-                  : storageNotice,
+              storageNotice: storageNotice.isEmpty ? null : storageNotice,
               onRefresh: _refreshFavorites,
               onNavTap: changePage,
               onSelectParking: openParkingDetail,
@@ -1363,11 +1341,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         }
 
         if (_sessionLoadError != null) {
-          _myParkingLoad?.presented(
-            context,
-            source: 'none',
-            failed: true,
-          );
+          _myParkingLoad?.presented(context, source: 'none', failed: true);
 
           return _loadFailure(
             _sessionLoadError!,
@@ -1382,11 +1356,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             final session = sessionState.activeSession;
 
             if (session == null && sessionService.pendingRequest != null) {
-              _myParkingLoad?.presented(
-                context,
-                source: 'none',
-                failed: true,
-              );
+              _myParkingLoad?.presented(context, source: 'none', failed: true);
 
               return _loadFailure(
                 sessionService.notice ??

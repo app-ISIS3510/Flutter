@@ -14,6 +14,7 @@ import 'package:parku/repositories/session_repository.dart';
 import 'package:parku/repositories/user_local_store.dart';
 import 'package:parku/repositories/user_repository.dart';
 import 'package:parku/screens/main_navigation.dart';
+import 'package:parku/screens/no_active_parking.dart';
 import 'package:parku/services/pickup_analytics_service.dart';
 import 'package:parku/services/profile_service.dart';
 import 'package:parku/services/session_service.dart';
@@ -22,6 +23,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'support/memory_auth_storage.dart';
 import 'support/offline_fakes.dart';
 import 'support/parking_fakes.dart';
+import 'support/navigation_actions.dart';
+import 'support/unavailable_sqlite.dart';
 
 class FlowHistory extends SessionHistoryRepository {
   final summaries = <ParkingSummary>[];
@@ -35,6 +38,16 @@ class FlowHistory extends SessionHistoryRepository {
   Future<List<ParkingSummary>> getSavedSessions() async => List.of(summaries);
 }
 
+Future<void> waitForScreen(WidgetTester tester, Finder screen) async {
+  // pumpAndSettle can finish while a connection check is still waiting: this
+  // screen shows a static loading label rather than an animated progress bar.
+  for (var i = 0; i < 300 && screen.evaluate().isEmpty; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  expect(screen, findsOneWidget);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   var online = true;
@@ -43,6 +56,7 @@ void main() {
   final events = <Map<String, dynamic>>[];
 
   setUp(() async {
+    useUnavailableSqlite();
     online = true;
     showParking = false;
     session = null;
@@ -87,7 +101,14 @@ void main() {
               },
             ];
           case '/rest/v1/parking_lots_with_availability':
-            if (!showParking) return http.Response('{}', 400);
+            if (!showParking) {
+              return http.Response(
+                '{}',
+                400,
+                request: request,
+                headers: {'content-type': 'application/json'},
+              );
+            }
             body = request.url.queryParameters.containsKey('id')
                 ? parking
                 : [parking];
@@ -179,8 +200,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: 'Home layout');
         showParking = true;
-        await tester.tap(find.text('Parking lots'));
-        await tester.pumpAndSettle();
+        await tapNavigation(tester, 'Parking lots');
         expect(tester.takeException(), isNull, reason: 'Parking list layout');
         await tester.scrollUntilVisible(
           find.text('City U Parking'),
@@ -201,10 +221,17 @@ void main() {
         expect(find.textContaining('Suggested pickup time:'), findsOneWidget);
         await tester.ensureVisible(find.text('Start parking'));
         await tester.tap(find.text('Start parking'));
-        await tester.pumpAndSettle();
+        await waitForScreen(tester, find.text('I picked up my vehicle'));
         expect(tester.takeException(), isNull, reason: 'Active parking layout');
         await analytics.flush();
-        expect(session?['status'], 'active');
+        expect(
+          session?['status'],
+          'active',
+          reason: tester
+              .widgetList<Text>(find.byType(Text))
+              .map((text) => text.data)
+              .join(' | '),
+        );
         final choice = events.singleWhere(
           (event) => event['event_type'] == 'parking_pickup_choice',
         );
@@ -216,7 +243,7 @@ void main() {
         expect(tester.takeException(), isNull, reason: 'End parking layout');
         await tester.ensureVisible(find.text("Yes, I've picked it up"));
         await tester.tap(find.text("Yes, I've picked it up"));
-        await tester.pumpAndSettle();
+        await waitForScreen(tester, find.byType(NoActiveParkingScreen));
         expect(
           tester.takeException(),
           isNull,
@@ -229,8 +256,7 @@ void main() {
         expect(saved.single.parkingName, 'City U Parking');
         expect(saved.single.vehiclePlate, 'ABC12D');
         expect(await store.read('session_request'), isNull);
-        await tester.tap(find.text('Profile').last);
-        await tester.pumpAndSettle();
+        await tapNavigation(tester, 'Profile');
         await tester.ensureVisible(find.text('Saved parking'));
         await tester.tap(find.text('Saved parking'));
         await tester.pumpAndSettle();
