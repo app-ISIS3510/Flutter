@@ -119,6 +119,11 @@ class ProfileController extends ChangeNotifier {
           : vehicles;
       if (version != _version) return false;
       vehicles = savedVehicles;
+      if (refreshVehicles && service.vehiclesFromCache) {
+        throw const ConnectionFailure(
+          'Your change was saved, but the vehicle list could not be refreshed. Reconnect and refresh before choosing a vehicle.',
+        );
+      }
       return true;
     } catch (e) {
       if (version == _version) error = messageFor(e);

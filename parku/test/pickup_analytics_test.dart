@@ -175,6 +175,31 @@ void main() {
   });
 
   test(
+    'the new account sends its queue after an earlier account finishes sending',
+    () async {
+      remote.gate = Completer<void>();
+      await analytics.saveChoice(session('session-1'), choice());
+      await remote.received.future;
+      await signInAs(client, 'user-2');
+      final nextSession = ParkingSession.fromMap({
+        ...session('session-2').toMap(),
+        'user_id': 'user-2',
+      });
+      await analytics.saveChoice(nextSession, choice(manual: true));
+      final sending = analytics.flush();
+      remote.gate!.complete();
+
+      expect(await sending, isTrue);
+      expect(remote.saved.keys, ['session-2']);
+      expect((await store.read('pickup_analytics'))!['events'], isEmpty);
+
+      await signInAs(client, 'user-1');
+      expect(await analytics.flush(), isTrue);
+      expect(remote.saved.keys, ['session-2', 'session-1']);
+    },
+  );
+
+  test(
     'old requests without the original suggestion are left unrecorded',
     () async {
       await analytics.saveChoice(session('session-1'), {

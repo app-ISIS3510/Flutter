@@ -100,6 +100,31 @@ void main() {
   );
 
   test(
+    'moving from failed Wi-Fi to mobile data retries synchronization',
+    () async {
+      controller.dispose();
+      var serverAvailable = false;
+      controller = create(() async {
+        refreshes++;
+        if (!serverAvailable) throw const SocketException('No internet');
+      });
+      await controller.start();
+      events.add([ConnectivityResult.wifi]);
+      await settleEvents();
+      expect(controller.error, isNotNull);
+
+      serverAvailable = true;
+      events.add([ConnectivityResult.mobile]);
+      await settleEvents();
+      expect(refreshes, 2);
+      expect(controller.error, isNull);
+      events.add([ConnectivityResult.mobile]);
+      await settleEvents();
+      expect(refreshes, 2);
+    },
+  );
+
+  test(
     'Wi-Fi without server access is not reported as a successful refresh',
     () async {
       controller.dispose();

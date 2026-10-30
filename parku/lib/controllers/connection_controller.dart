@@ -19,6 +19,7 @@ class ConnectionController extends ChangeNotifier {
   bool _checkAgain = false;
   bool _disposed = false;
   int _events = 0;
+  Set<ConnectivityResult> _networks = {};
 
   ConnectionController({
     required this.onReconnect,
@@ -57,10 +58,14 @@ class ConnectionController extends ChangeNotifier {
   void _receive(List<ConnectivityResult> results) {
     if (_disposed) return;
     _events++;
-    final available = results.any(
-      (result) => result != ConnectivityResult.none,
-    );
-    if (available == hasNetwork) return;
+    final networks = results
+        .where((result) => result != ConnectivityResult.none)
+        .toSet();
+    final available = networks.isNotEmpty;
+    final changed =
+        networks.length != _networks.length || !_networks.containsAll(networks);
+    if (available == hasNetwork && !changed) return;
+    _networks = networks;
     hasNetwork = available;
     error = null;
     if (available) {

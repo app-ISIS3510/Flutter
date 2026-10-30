@@ -54,6 +54,7 @@ class MainNavigationScreen extends StatefulWidget {
   final SessionService? sessionService;
   final Stream<List<ConnectivityResult>>? connectionChanges;
   final Future<List<ConnectivityResult>> Function()? checkConnection;
+  final DateTime Function()? currentTime;
 
   const MainNavigationScreen({
     super.key,
@@ -62,6 +63,7 @@ class MainNavigationScreen extends StatefulWidget {
     this.sessionService,
     this.connectionChanges,
     this.checkConnection,
+    this.currentTime,
   });
 
   @override
@@ -115,7 +117,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     final parts = time.split(':');
     final hour = int.parse(parts[0]);
     final minute = int.parse(parts[1]);
-    final now = DateTime.now();
+    final now = widget.currentTime?.call() ?? DateTime.now();
 
     return DateTime(now.year, now.month, now.day, hour, minute);
   }
@@ -627,6 +629,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         context,
         MaterialPageRoute<void>(
           builder: (context) => PickupTimeScreen(
+            currentTime: widget.currentTime,
             onSuggestionReady: (time) => suggestedTime = time,
             onNavTap: _profileNavTap,
             vehicle: vehicle!,
@@ -752,6 +755,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         context,
         MaterialPageRoute<void>(
           builder: (context) => ChangePickupTimeScreen(
+            currentTime: widget.currentTime,
             onNavTap: _profileNavTap,
             initialTime:
                 draft?['time'] as String? ??
