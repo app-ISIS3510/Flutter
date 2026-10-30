@@ -27,6 +27,23 @@ class Parking {
     required this.availableMotorcycleSpaces,
   });
 
+  Map<String, dynamic> toMap() {
+  return {
+    'id': id,
+    'name': name,
+    'address': address,
+    'latitude': latitude,
+    'longitude': longitude,
+    'car_spaces': carSpaces,
+    'motorcycle_spaces': motorcycleSpaces,
+    'price_per_minute': pricePerMinute,
+    'opening_time': openingTime,
+    'closing_time': closingTime,
+    'available_car_spaces': availableCarSpaces,
+    'available_motorcycle_spaces': availableMotorcycleSpaces,
+  };
+}
+
   factory Parking.fromMap(Map<String, dynamic> map) {
     return Parking(
       id: map['id'] as String,

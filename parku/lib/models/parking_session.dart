@@ -9,6 +9,8 @@ class ParkingSession {
   final String vehicleType;
   final String? vehicleId;
   final String? vehiclePlate;
+  final bool isFromCache;
+  final DateTime? confirmedAt;
 
   ParkingSession({
     required this.id,
@@ -21,9 +23,28 @@ class ParkingSession {
     this.vehicleType = 'car',
     this.vehicleId,
     this.vehiclePlate,
+    this.isFromCache = false,
+    this.confirmedAt,
   });
 
-  factory ParkingSession.fromMap(Map<String, dynamic> map) {
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'user_id': userId,
+    'parking_id': parkingId,
+    'pickup_time': pickupTime.toUtc().toIso8601String(),
+    'started_at': startedAt.toUtc().toIso8601String(),
+    'ended_at': endedAt?.toUtc().toIso8601String(),
+    'status': status,
+    'vehicle_type': vehicleType,
+    'vehicle_id': vehicleId,
+    'vehicle_plate': vehiclePlate,
+  };
+
+  factory ParkingSession.fromMap(
+    Map<String, dynamic> map, {
+    bool isFromCache = false,
+    DateTime? confirmedAt,
+  }) {
     return ParkingSession(
       id: map['id'] as String,
       userId: map['user_id'] as String?,
@@ -37,6 +58,8 @@ class ParkingSession {
       vehicleType: map['vehicle_type'] as String? ?? 'car',
       vehicleId: map['vehicle_id'] as String?,
       vehiclePlate: map['vehicle_plate'] as String?,
+      isFromCache: isFromCache,
+      confirmedAt: confirmedAt,
     );
   }
 }

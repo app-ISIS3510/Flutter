@@ -1,34 +1,39 @@
 import 'parking.dart';
 import 'vehicle.dart';
+import 'parking_availability.dart';
 
 class ParkingOption {
   final Parking parking;
   final double distanceMeters;
   final VehicleType? vehicleType;
+  final bool isFromCache;
+  final DateTime? updatedAt;
 
   const ParkingOption({
     required this.parking,
     required this.distanceMeters,
     this.vehicleType,
+    this.isFromCache = false,
+    this.updatedAt,
   });
+
+  ParkingAvailability get availability => ParkingAvailability(
+    parking: parking,
+    updatedAt: updatedAt,
+    isFromCache: isFromCache,
+  );
 
   int? get totalSpaces {
     if (vehicleType == null) return null;
 
-    final total = vehicleType == VehicleType.car
-        ? parking.carSpaces
-        : parking.motorcycleSpaces;
-    return total < 0 ? 0 : total;
+    return availability.capacityFor(vehicleType!);
   }
 
   int? get availableSpaces {
     final total = totalSpaces;
     if (total == null) return null;
 
-    final available = vehicleType == VehicleType.car
-        ? parking.availableCarSpaces
-        : parking.availableMotorcycleSpaces;
-    return available.clamp(0, total).toInt();
+    return availability.availableFor(vehicleType!);
   }
 
   double? get availabilityRatio {
@@ -38,5 +43,6 @@ class ParkingOption {
     return availableSpaces! / total;
   }
 
-  bool get canBeRecommended => (availableSpaces ?? 0) > 0;
+  bool get canBeRecommended =>
+      vehicleType != null && availability.canRecommend(vehicleType!);
 }
