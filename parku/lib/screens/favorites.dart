@@ -36,6 +36,7 @@ class FavoritesScreen extends StatelessWidget {
       'pricePerMinute': parking.pricePerMinute.toString(),
       'openingTime': parking.openingTime ?? '',
       'closingTime': parking.closingTime ?? '',
+      'imageUrl': parking.imageUrl ?? '',
       'latitude': parking.latitude?.toString() ?? '',
       'longitude': parking.longitude?.toString() ?? '',
     };

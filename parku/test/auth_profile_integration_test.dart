@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:parku/main.dart';
 import 'package:parku/screens/sign_in.dart';
+import 'package:parku/screens/parking_detail.dart';
 import 'package:parku/screens/profile/edit_profile_screen.dart';
 import 'package:parku/screens/profile/vehicles_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -14,13 +15,44 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'support/memory_auth_storage.dart';
 import 'support/parking_fakes.dart';
 
+import 'package:parku/services/profile_service.dart';
+import 'package:parku/repositories/user_repository.dart';
+import 'package:parku/repositories/user_local_store.dart';
+import 'package:parku/widgets/navigation_bar.dart';
+
+Future<void> tapNavigation(
+  WidgetTester tester,
+  String label,
+) async {
+  tester
+      .state<ScaffoldMessengerState>(
+        find.byType(ScaffoldMessenger).first,
+      )
+      .clearSnackBars();
+
+  await tester.pumpAndSettle();
+
+  final target = find.descendant(
+    of: find.byType(NavBar).last,
+    matching: find.text(label),
+  ).hitTestable();
+
+  expect(target, findsOneWidget);
+  await tester.tap(target);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   var parkingAvailable = false;
   List<Map<String, dynamic>> vehicles = [];
+  List<Map<String, dynamic>> ranking = [];
+  var favoritesFail = false;
   setUp(() async {
     parkingAvailable = false;
     vehicles = [];
+    ranking = [];
+    favoritesFail = false;
     final user = {
       'id': 'user-1',
       'aud': 'authenticated',
@@ -70,9 +102,18 @@ void main() {
           case '/rest/v1/parking_sessions':
           case '/rest/v1/app_admins':
             body = [];
+          case '/rest/v1/bq2_top_parking_completed_last_7_days':
+            body = ranking;
+          case '/rest/v1/favorites':
+            if (favoritesFail) throw http.ClientException('Offline');
+            body = [];
+          case '/rest/v1/analytics_events':
+            body = [];
           case '/rest/v1/parking_lots_with_availability':
             if (parkingAvailable) {
-              body = [parkingData()];
+              body = request.url.queryParameters.containsKey('id')
+                  ? parkingData()
+                  : [parkingData()];
             } else {
               status = 400;
               body = {'message': 'Map unavailable in this test'};
@@ -92,6 +133,16 @@ void main() {
     );
   });
   tearDown(() async => Supabase.instance.dispose());
+
+  Widget app() {
+    final client = Supabase.instance.client;
+    return ParkUApp(
+      profileService: ProfileService(
+        SupabaseUserRepository(client),
+        store: UserLocalStore.memory(client),
+      ),
+    );
+  }
 
   testWidgets(
     'search loads the saved vehicle and reads it again when reopened',
@@ -113,15 +164,16 @@ void main() {
         },
       ];
 
-      await tester.pumpWidget(const ParkUApp());
+      await tester.pumpWidget(app());
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).at(0), 'juan@example.com');
       await tester.enterText(find.byType(TextField).at(1), 'test-password');
       await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
       await tester.pumpAndSettle();
       parkingAvailable = true;
-      await tester.tap(find.text('Parking lots'));
+      await tapNavigation(tester, 'Parking lots');
       await tester.pumpAndSettle();
+      final previousLocationCalls = location.positionCalls;
       await tester.tap(find.text('Search parking lots'));
       await tester.pumpAndSettle();
       expect(find.text('Availability for your car · ABC123'), findsOneWidget);
@@ -144,7 +196,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('7 estimated spaces · 70% of capacity'), findsOneWidget);
-      expect(location.positionCalls, 2);
+      expect(location.positionCalls - previousLocationCalls, 2);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     },
@@ -157,14 +209,14 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(const ParkUApp());
+      await tester.pumpWidget(app());
       await tester.pumpAndSettle();
       expect(find.byType(SignInScreen), findsOneWidget);
       await tester.enterText(find.byType(TextField).at(0), 'juan@example.com');
       await tester.enterText(find.byType(TextField).at(1), 'test-password');
       await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Profile'));
+      await tapNavigation(tester, 'Profile');
       await tester.pumpAndSettle();
       expect(find.text('Juan'), findsOneWidget);
       await tester.tap(find.text('Edit profile'));
@@ -177,7 +229,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(VehiclesScreen), findsOneWidget);
       expect(find.text('Add your first vehicle'), findsOneWidget);
-      await tester.tap(find.text('Profile'));
+      await tapNavigation(tester, 'Profile');
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Sign out'));
       await tester.tap(find.text('Sign out'));
@@ -195,4 +247,91 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('a normal account can read BQ2 and open a parking lot', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final originalPlatform = GeolocatorPlatform.instance;
+    GeolocatorPlatform.instance = FakeLocationPlatform();
+    addTearDown(() => GeolocatorPlatform.instance = originalPlatform);
+    ranking = [
+      {
+        'parking_id': 'parking-1',
+        'parking_name': 'City U Parking',
+        'completed_sessions': 8,
+      },
+    ];
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'juan@example.com');
+    await tester.enterText(find.byType(TextField).at(1), 'test-password');
+    await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+    await tester.pumpAndSettle();
+    await tapNavigation(tester, 'Profile');
+    await tester.pumpAndSettle();
+    expect(find.text('Analytics dashboard'), findsNothing);
+    parkingAvailable = true;
+    await tapNavigation(tester, 'Parking lots');
+    await tester.pumpAndSettle();
+    expect(find.text('Most used parking lots this week'), findsOneWidget);
+    await tester.ensureVisible(find.text('8 completed sessions'));
+    await tester.tap(find.text('8 completed sessions'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ParkingDetailScreen), findsOneWidget);
+    expect(
+      tester
+          .widget<ParkingDetailScreen>(find.byType(ParkingDetailScreen))
+          .parking['id'],
+      'parking-1',
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a favorite lookup failure keeps BQ2 navigation recoverable', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final originalPlatform = GeolocatorPlatform.instance;
+    GeolocatorPlatform.instance = FakeLocationPlatform();
+    addTearDown(() => GeolocatorPlatform.instance = originalPlatform);
+    ranking = [
+      {
+        'parking_id': 'parking-1',
+        'parking_name': 'City U Parking',
+        'completed_sessions': 8,
+      },
+    ];
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'juan@example.com');
+    await tester.enterText(find.byType(TextField).at(1), 'test-password');
+    await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+    await tester.pumpAndSettle();
+    parkingAvailable = true;
+    await tapNavigation(tester, 'Parking lots');
+    await tester.pumpAndSettle();
+    favoritesFail = true;
+    await tester.ensureVisible(find.text('8 completed sessions'));
+    await tester.tap(find.text('8 completed sessions'));
+    await tester.pumpAndSettle();
+    final errorMessage = find.text(
+      'Could not open this parking lot. Check your connection and try again.',
+    );
+    for (var i = 0; i < 15 && errorMessage.evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    expect(find.byType(ParkingDetailScreen), findsNothing);
+    expect(errorMessage, findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

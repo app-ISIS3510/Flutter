@@ -1,8 +1,9 @@
+
 import 'package:flutter/material.dart';
 
 import '../controllers/auth_controller.dart';
 import '../theme/app_theme.dart';
-import '../widgets/user_error_notice.dart';
+import '../widgets/auth_error_message.dart';
 import '../utils/user_error_message.dart';
 
 class SignInScreen extends StatefulWidget {
@@ -28,6 +29,9 @@ class _SignInScreenState extends State<SignInScreen> {
   final passwordController = TextEditingController();
 
   bool isLoading = false;
+  String? emailError;
+  String? passwordError;
+  String? authError;
 
   @override
   void dispose() {
@@ -36,8 +40,43 @@ class _SignInScreenState extends State<SignInScreen> {
     super.dispose();
   }
 
+  String _friendlyError(Object error) {
+    return userErrorMessage(
+      error,
+      action: ErrorAction.signIn,
+    );
+  }
+
   Future<void> _signIn() async {
     if (isLoading) return;
+
+    final email = emailController.text.trim();
+    final password = passwordController.text;
+
+    String? newEmailError;
+    String? newPasswordError;
+
+    if (email.isEmpty) {
+      newEmailError = 'Please enter your email address.';
+    } else if (!RegExp(
+      r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
+    ).hasMatch(email)) {
+      newEmailError = 'Please enter a valid email address.';
+    }
+
+    if (password.isEmpty) {
+      newPasswordError = 'Please enter your password.';
+    }
+
+    setState(() {
+      emailError = newEmailError;
+      passwordError = newPasswordError;
+      authError = null;
+    });
+
+    if (newEmailError != null || newPasswordError != null) {
+      return;
+    }
 
     setState(() {
       isLoading = true;
@@ -45,8 +84,8 @@ class _SignInScreenState extends State<SignInScreen> {
 
     try {
       await widget.controller.signIn(
-        email: emailController.text,
-        password: passwordController.text,
+        email: email,
+        password: password,
       );
 
       if (!mounted) return;
@@ -54,7 +93,9 @@ class _SignInScreenState extends State<SignInScreen> {
     } catch (error) {
       if (!mounted) return;
 
-      showUserError(context, error, action: ErrorAction.signIn);
+      setState(() {
+        authError = _friendlyError(error);
+      });
     } finally {
       if (mounted) {
         setState(() {
@@ -64,20 +105,40 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
-  InputDecoration _inputDecoration(String hint) {
+  InputDecoration _inputDecoration(
+    String hint, {
+    bool hasError = false,
+  }) {
+    final borderRadius = BorderRadius.circular(11);
+
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: AppColors.greyText, fontSize: 14),
+      hintStyle: const TextStyle(
+        color: AppColors.greyText,
+        fontSize: 14,
+      ),
       filled: true,
       fillColor: AppColors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 15,
+      ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(11),
-        borderSide: const BorderSide(color: Color(0xFFE2DEEB)),
+        borderRadius: borderRadius,
+        borderSide: BorderSide(
+          color: hasError
+              ? const Color(0xFFC83D4D)
+              : const Color(0xFFE2DEEB),
+        ),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(11),
-        borderSide: const BorderSide(color: AppColors.primary, width: 1.4),
+        borderRadius: borderRadius,
+        borderSide: BorderSide(
+          color: hasError
+              ? const Color(0xFFC83D4D)
+              : AppColors.primary,
+          width: 1.4,
+        ),
       ),
     );
   }
@@ -92,6 +153,32 @@ class _SignInScreenState extends State<SignInScreen> {
           fontWeight: FontWeight.w600,
           color: AppColors.darkText,
         ),
+      ),
+    );
+  }
+
+  Widget _fieldError(String message) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.error_outline,
+            color: Color(0xFFC83D4D),
+            size: 15,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFFC83D4D),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -152,8 +239,21 @@ class _SignInScreenState extends State<SignInScreen> {
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
                       autofillHints: const [AutofillHints.email],
-                      decoration: _inputDecoration('Email address'),
+                      onChanged: (_) {
+                        if (emailError != null || authError != null) {
+                          setState(() {
+                            emailError = null;
+                            authError = null;
+                          });
+                        }
+                      },
+                      decoration: _inputDecoration(
+                        'Email address',
+                        hasError: emailError != null,
+                      ),
                     ),
+                    if (emailError != null)
+                      _fieldError(emailError!),
                     const SizedBox(height: 14),
                     _label('Password'),
                     TextField(
@@ -162,8 +262,25 @@ class _SignInScreenState extends State<SignInScreen> {
                       textInputAction: TextInputAction.done,
                       autofillHints: const [AutofillHints.password],
                       onSubmitted: (_) => _signIn(),
-                      decoration: _inputDecoration('Password'),
+                      onChanged: (_) {
+                        if (passwordError != null || authError != null) {
+                          setState(() {
+                            passwordError = null;
+                            authError = null;
+                          });
+                        }
+                      },
+                      decoration: _inputDecoration(
+                        'Password',
+                        hasError: passwordError != null,
+                      ),
                     ),
+                    if (passwordError != null)
+                      _fieldError(passwordError!),
+                    if (authError != null) ...[
+                      const SizedBox(height: 14),
+                      AuthErrorMessage(message: authError!),
+                    ],
                     const SizedBox(height: 14),
                     SizedBox(
                       height: 43,
@@ -206,7 +323,9 @@ class _SignInScreenState extends State<SignInScreen> {
                               )
                             : const Text(
                                 'Sign in',
-                                style: TextStyle(fontWeight: FontWeight.w600),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                       ),
                     ),
@@ -233,7 +352,10 @@ class _SignInScreenState extends State<SignInScreen> {
                     const SizedBox(height: 12),
                     const Text(
                       'Find parking near campus and keep track of your stay.',
-                      style: TextStyle(fontSize: 11, color: AppColors.greyText),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.greyText,
+                      ),
                     ),
                   ],
                 ),

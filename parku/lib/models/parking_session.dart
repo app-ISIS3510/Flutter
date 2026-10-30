@@ -62,4 +62,5 @@ class ParkingSession {
       confirmedAt: confirmedAt,
     );
   }
+
 }

@@ -66,6 +66,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       'pricePerMinute': parking.pricePerMinute.toString(),
       'openingTime': parking.openingTime ?? '',
       'closingTime': parking.closingTime ?? '',
+      'imageUrl': parking.imageUrl ?? '',
     };
   }
 

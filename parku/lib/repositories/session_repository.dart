@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/parking_session.dart';
+import '../services/connection_failure.dart';
 import '../data/local/session_local_data_source.dart';
 import '../utils/async_operations.dart';
 
@@ -163,37 +164,91 @@ class SessionRepository {
     }
   }
 
-  Future<ParkingSession> updatePickupTime({
+    Future<ParkingSession> updatePickupTime({
     required String sessionId,
     required DateTime pickupTime,
-  }) => _mutation(
-    'pickup:$sessionId:${pickupTime.toUtc().toIso8601String()}',
-    () => _updatePickupTime(sessionId: sessionId, pickupTime: pickupTime),
-  );
+    DateTime? previousPickupTime,
+  }) {
+    final nextTime = pickupTime.toUtc().toIso8601String();
+    final previousTime =
+        previousPickupTime?.toUtc().toIso8601String() ?? 'any';
+
+    return _mutation(
+      'pickup:$sessionId:$nextTime:$previousTime',
+      () => _updatePickupTime(
+        sessionId: sessionId,
+        pickupTime: pickupTime,
+        previousPickupTime: previousPickupTime,
+      ),
+    );
+  }
 
   Future<ParkingSession> _updatePickupTime({
     required String sessionId,
     required DateTime pickupTime,
+    DateTime? previousPickupTime,
   }) async {
     final userId = _userId;
-    final response = await client
+
+    var query = client
         .from('parking_sessions')
-        .update({'pickup_time': pickupTime.toUtc().toIso8601String()})
+        .update({
+          'pickup_time': pickupTime.toUtc().toIso8601String(),
+        })
         .eq('id', sessionId)
         .eq('user_id', userId)
+        .eq('status', 'active');
+
+    if (previousPickupTime != null) {
+      query = query.eq(
+        'pickup_time',
+        previousPickupTime.toUtc().toIso8601String(),
+      );
+    }
+
+    final response = await query
         .select()
-        .single()
         .timeout(const Duration(seconds: 15));
 
     _checkUser(userId);
-    return _confirmed(userId, response);
+
+    if (response.isEmpty) {
+      final session = await _fetchSessionById(
+        sessionId,
+        userId,
+      );
+
+      _checkUser(userId);
+
+      if (session != null &&
+          session.status == 'active' &&
+          session.pickupTime.isAtSameMomentAs(pickupTime)) {
+        return session;
+      }
+
+      throw const ConnectionFailure(
+        'This parking session changed. '
+        'Refresh My parking before trying again.',
+      );
+    }
+
+    return _confirmed(userId, response.single);
   }
 
-  Future<ParkingSession> endSession({required String sessionId}) =>
-      _mutation('end:$sessionId', () => _endSession(sessionId: sessionId));
+  Future<ParkingSession> endSession({
+    required String sessionId,
+  }) {
+    return _mutation(
+      'end:$sessionId',
+      () => _endSession(sessionId: sessionId),
+    );
+  }
 
-  Future<ParkingSession> _endSession({required String sessionId}) async {
+  Future<ParkingSession> _endSession({
+    required String sessionId,
+  }) async {
     final userId = _userId;
+
     final response = await client
         .from('parking_sessions')
         .update({
@@ -202,12 +257,97 @@ class SessionRepository {
         })
         .eq('id', sessionId)
         .eq('user_id', userId)
+        .eq('status', 'active')
         .select()
-        .single()
         .timeout(const Duration(seconds: 15));
 
     _checkUser(userId);
-    return _confirmed(userId, response);
+
+    if (response.isEmpty) {
+      final session = await _fetchSessionById(
+        sessionId,
+        userId,
+      );
+
+      _checkUser(userId);
+
+      if (session != null && session.status == 'completed') {
+        return session;
+      }
+
+      throw const ConnectionFailure(
+        'This parking session changed. '
+        'Refresh My parking before trying again.',
+      );
+    }
+
+    return _confirmed(userId, response.single);
+  }
+
+  Future<ParkingSession?> getSessionById(String id) async {
+    final userId = _userId;
+
+    return _operations.run(
+      () => _fetchSessionById(id, userId),
+    );
+  }
+
+  // También se usa dentro de una mutación ya serializada:
+  // no debe volver a entrar en _operations.
+  Future<ParkingSession?> _fetchSessionById(
+    String id,
+    String userId,
+  ) async {
+    _checkUser(userId);
+
+    final row = await client
+        .from('parking_sessions')
+        .select()
+        .eq('id', id)
+        .eq('user_id', userId)
+        .maybeSingle()
+        .timeout(const Duration(seconds: 8));
+
+    _checkUser(userId);
+
+    if (row == null) return null;
+
+    return _confirmed(userId, row);
+  }
+
+  Future<List<ParkingSession>> getMatchingSessions({
+    required String parkingId,
+    required String vehicleId,
+    required DateTime pickupTime,
+  }) async {
+    final userId = _userId;
+
+    return _operations.run(() async {
+      _checkUser(userId);
+
+      final rows = await client
+          .from('parking_sessions')
+          .select()
+          .eq('user_id', userId)
+          .eq('parking_id', parkingId)
+          .eq('vehicle_id', vehicleId)
+          .eq(
+            'pickup_time',
+            pickupTime.toUtc().toIso8601String(),
+          )
+          .order('started_at', ascending: false)
+          .timeout(const Duration(seconds: 8));
+
+      _checkUser(userId);
+
+      final sessions = <ParkingSession>[];
+
+      for (final row in rows) {
+        sessions.add(await _confirmed(userId, row));
+      }
+
+      return sessions;
+    });
   }
 
   Future<bool> hasActiveSession() async {

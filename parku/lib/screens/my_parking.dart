@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import 'end_parking.dart';
 import '../controllers/navigation_controller.dart';
+import 'profile/profile_widgets.dart';
 import '../models/navigation_provider.dart';
 import '../widgets/external_navigation.dart';
 
@@ -20,6 +21,8 @@ class MyParkingScreen extends StatefulWidget {
 
   final ParkingSession session;
   final Parking parking;
+  final String? notice;
+  final VoidCallback? onRefresh;
 
   const MyParkingScreen({
     super.key,
@@ -30,6 +33,8 @@ class MyParkingScreen extends StatefulWidget {
     required this.parking,
     required this.navigationController,
     this.onChangePickupTime,
+    this.notice,
+    this.onRefresh,
   });
 
   @override
@@ -140,14 +145,31 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'My parking',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.darkText,
-                      ),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'My parking',
+                            style: TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.darkText,
+                            ),
+                          ),
+                        ),
+                        if (widget.onRefresh != null)
+                          IconButton(
+                            onPressed: widget.onRefresh,
+                            tooltip: 'Refresh parking status',
+                            icon: const Icon(Icons.refresh),
+                          ),
+                      ],
                     ),
+
+                    if (widget.notice != null) ...[
+                      const SizedBox(height: 16),
+                      ProfileNotice(widget.notice!, onRetry: widget.onRefresh),
+                    ],
 
                     const SizedBox(height: 30),
 
@@ -194,36 +216,39 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                             shape: BoxShape.circle,
                             color: AppColors.background,
                           ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(
-                                Icons.timer_outlined,
-                                color: AppColors.primary,
-                                size: 38,
-                              ),
-
-                              const SizedBox(height: 8),
-
-                              Text(
-                                remainingText,
-                                style: const TextStyle(
-                                  fontSize: 50,
-                                  fontWeight: FontWeight.w700,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.timer_outlined,
                                   color: AppColors.primary,
+                                  size: 38,
                                 ),
-                              ),
 
-                              const SizedBox(height: 4),
+                                const SizedBox(height: 8),
 
-                              const Text(
-                                'hours : minutes',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: AppColors.greyText,
+                                Text(
+                                  remainingText,
+                                  style: const TextStyle(
+                                    fontSize: 50,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary,
+                                  ),
                                 ),
-                              ),
-                            ],
+
+                                const SizedBox(height: 4),
+
+                                const Text(
+                                  'hours : minutes',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: AppColors.greyText,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -278,7 +303,9 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
 
                           const SizedBox(height: 10),
 
-                          Row(
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 4,
                             children: [
                               Text(
                                 widget.session.vehicleType == 'motorcycle'
@@ -289,7 +316,6 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                                   color: AppColors.greyText,
                                 ),
                               ),
-                              SizedBox(width: 12),
                               Text(
                                 widget.session.vehiclePlate ??
                                     'Plate not recorded',

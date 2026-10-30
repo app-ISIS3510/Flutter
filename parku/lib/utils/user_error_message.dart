@@ -4,12 +4,17 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'error_messages.dart';
 
+import '../services/connection_failure.dart';
+
 export 'error_messages.dart' show ErrorAction, UserInputException;
 
 String userErrorMessage(
   Object? error, {
   ErrorAction action = ErrorAction.load,
 }) {
+  if (error is ConnectionFailure) {
+    return error.message;
+  }
   if (error is UserInputException) return error.message;
   if (error is OfflineActionException) {
     return ErrorMessages.offline(action);

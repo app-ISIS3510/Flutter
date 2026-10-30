@@ -23,6 +23,17 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   VehicleType _type = VehicleType.car;
   String? _validationError;
   @override
+  void initState() {
+    super.initState();
+    final pending =
+        widget.controller.vehicleDraft ?? widget.controller.pendingChange;
+    if (pending?['kind'] == 'add_vehicle') {
+      _plate.text = pending!['plate'] as String;
+      _type = VehicleType.values.byName(pending['type'] as String);
+    }
+  }
+
+  @override
   void dispose() {
     _plate.dispose();
     super.dispose();

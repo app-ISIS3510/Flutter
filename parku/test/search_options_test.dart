@@ -13,8 +13,21 @@ import 'package:parku/screens/search.dart';
 import 'package:parku/services/distance_manager.dart';
 import 'package:parku/services/parking_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:parku/models/parking.dart';
+import 'package:parku/data/local/parking_local_data_source.dart';
 
 import 'support/parking_fakes.dart';
+
+class TestParkingLocalDataSource extends ParkingLocalDataSource {
+  @override
+  Future<CachedParkingList?> readParkingLots() async => null;
+
+  @override
+  Future<CachedParkingList?> readParkingForNearby() async => null;
+
+  @override
+  Future<void> saveParkingLots(List<Parking> parkingLots) async {}
+}
 
 void main() {
   late GeolocatorPlatform originalPlatform;
@@ -55,7 +68,13 @@ void main() {
       ),
     );
     controller = ParkingController(
-      ParkingService(ParkingRepository(client), DistanceManager()),
+      ParkingService(
+        ParkingRepository(
+          client,
+          localDataSource: TestParkingLocalDataSource(),
+        ),
+        DistanceManager(),
+      ),
     );
   });
 
@@ -137,7 +156,10 @@ void main() {
     location.enabled = false;
     await tester.pumpWidget(search());
     await tester.pumpAndSettle();
-    expect(find.text('Location services are disabled.'), findsOneWidget);
+    expect(
+      find.text('Turn on your device location to find nearby parking lots.'),
+      findsOneWidget,
+    );
     await tester.enterText(find.byType(TextField), 'Library');
     await tester.testTextInput.receiveAction(TextInputAction.search);
     expect(searches, ['Library']);

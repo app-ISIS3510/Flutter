@@ -10,6 +10,7 @@ import '../models/parking_catalog_snapshot.dart';
 import '../state/parking_detail_state.dart';
 import '../utils/async_operations.dart';
 import '../services/connectivity_service.dart';
+import '../models/most_used_parking.dart';
 
 class ParkingRepository {
   final SupabaseClient client;
@@ -28,6 +29,19 @@ class ParkingRepository {
   }) : localDataSource = localDataSource ?? ParkingLocalDataSource(),
        _detailMemoryCache = LruCache(capacity: detailCacheCapacity),
        connectivityService = connectivityService ?? ConnectivityService();
+
+  Future<List<MostUsedParking>> getMostUsedParkingLots() async {
+    final response = await client
+        .from('bq2_top_parking_completed_last_7_days')
+        .select('parking_id,parking_name,completed_sessions')
+        .order('completed_sessions', ascending: false)
+        .order('parking_id', ascending: true)
+        .limit(3);
+
+    return response
+        .map((row) => MostUsedParking.fromMap(row))
+        .toList();
+  }
 
   ParkingDetailState? readMemoryParkingDetails(String id) {
     final cached = _detailMemoryCache.get(id);

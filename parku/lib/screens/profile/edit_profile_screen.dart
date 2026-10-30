@@ -20,10 +20,18 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _form = GlobalKey<FormState>();
   late final _name = TextEditingController(
-    text: widget.controller.profile?.fullName,
+    text:
+        widget.controller.profileDraft?['name'] as String? ??
+        (widget.controller.pendingChange?['kind'] == 'profile'
+            ? widget.controller.pendingChange!['name'] as String
+            : widget.controller.profile?.fullName),
   );
   late final _email = TextEditingController(
-    text: widget.controller.profile?.email,
+    text:
+        widget.controller.profileDraft?['email'] as String? ??
+        (widget.controller.pendingChange?['kind'] == 'profile'
+            ? widget.controller.pendingChange!['email'] as String
+            : widget.controller.profile?.email),
   );
   @override
   void dispose() {

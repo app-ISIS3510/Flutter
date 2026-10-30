@@ -23,7 +23,7 @@ class NoActiveParkingScreen extends StatelessWidget {
         child: Column(
           children: [
             Expanded(
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(30, 22, 30, 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

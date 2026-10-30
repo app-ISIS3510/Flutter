@@ -6,6 +6,8 @@ import 'theme/app_theme.dart';
 import 'utils/app_error_handler.dart';
 import 'widgets/unexpected_error_view.dart';
 import 'widgets/connectivity_banner.dart';
+import 'services/profile_service.dart';
+import 'services/session_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,7 +35,9 @@ Future<void> main() async {
 }
 
 class ParkUApp extends StatelessWidget {
-  const ParkUApp({super.key});
+  final ProfileService? profileService;
+  final SessionService? sessionService;
+  const ParkUApp({super.key, this.profileService, this.sessionService});
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +52,10 @@ class ParkUApp extends StatelessWidget {
         scaffoldBackgroundColor: AppColors.background,
         fontFamily: 'Inter',
       ),
-      home: const AuthGate(),
+      home: AuthGate(
+        profileService: profileService,
+        sessionService: sessionService,
+      ),
     );
   }
 }

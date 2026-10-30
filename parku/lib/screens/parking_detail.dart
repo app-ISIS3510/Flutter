@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import '../controllers/navigation_controller.dart';
 import '../controllers/analytics_controller.dart';
+import '../widgets/parking_photo.dart';
 import '../controllers/parking_controller.dart';
 import '../models/parking.dart';
 import '../state/parking_detail_state.dart';
@@ -393,12 +394,7 @@ class _ParkingDetailScreenState extends State<ParkingDetailScreen> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(20),
-                          child: Image.asset(
-                            'assets/images/cityuimage.png',
-                            width: double.infinity,
-                            height: 150,
-                            fit: BoxFit.cover,
-                          ),
+                          child: ParkingPhoto(imageUrl: widget.parking['imageUrl']),
                         ),
                         Positioned(
                           top: 10,

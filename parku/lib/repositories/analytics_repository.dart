@@ -10,10 +10,37 @@ import '../utils/client_id.dart';
 class AnalyticsRepository {
   final SupabaseClient client;
   final AnalyticsLocalDataSource localDataSource;
+
   Future<void>? _flushFuture;
 
-  AnalyticsRepository(this.client, {AnalyticsLocalDataSource? localDataSource})
-    : localDataSource = localDataSource ?? AnalyticsLocalDataSource();
+  AnalyticsRepository(
+    this.client, {
+    AnalyticsLocalDataSource? localDataSource,
+  }) : localDataSource =
+           localDataSource ?? AnalyticsLocalDataSource();
+
+  String? get userId => client.auth.currentUser?.id;
+
+  Future<void> savePickupChoice(
+    Map<String, dynamic> event,
+  ) async {
+    final currentUserId = userId;
+
+    if (currentUserId == null ||
+        currentUserId != event['user_id']) {
+      throw const AuthException(
+        'The signed-in account changed.',
+      );
+    }
+
+    await client
+        .from('analytics_events')
+        .upsert(
+          event,
+          onConflict: 'id',
+          ignoreDuplicates: true,
+        );
+  }
 
   Future<void> trackEvent({
     required String eventType,
@@ -22,44 +49,58 @@ class AnalyticsRepository {
     Map<String, dynamic>? metadata,
     DateTime? occurredAt,
   }) async {
-    final userId = client.auth.currentUser?.id;
-    if (userId == null) return;
+    final currentUserId = userId;
+    if (currentUserId == null) return;
 
     await localDataSource.enqueue(
       PendingAnalyticsEvent(
         id: newClientId(),
-        userId: userId,
+        userId: currentUserId,
         eventType: eventType,
         screen: screen,
         parkingId: parkingId,
-        metadata: {'platform': 'flutter', ...?metadata},
+        metadata: {
+          'platform': 'flutter',
+          ...?metadata,
+        },
         createdAt: occurredAt ?? DateTime.now().toUtc(),
       ),
     );
   }
 
   Future<void> flushPending() {
-    return _flushFuture ??= _flush().whenComplete(() => _flushFuture = null);
+    return _flushFuture ??=
+        _flush().whenComplete(() => _flushFuture = null);
   }
 
   Future<void> _flush() async {
-    final userId = client.auth.currentUser?.id;
-    if (userId == null) return;
+    final owner = userId;
+    if (owner == null) return;
 
-    while (client.auth.currentUser?.id == userId) {
-      final events = await localDataSource.readDue(userId);
+    while (userId == owner) {
+      final events = await localDataSource.readDue(owner);
       if (events.isEmpty) return;
+
       for (final event in events) {
-        if (client.auth.currentUser?.id != userId) return;
+        if (userId != owner) return;
+
         try {
-          // Retrying a previously accepted UUID cannot insert the event twice.
           await client
               .from('analytics_events')
-              .upsert(event.payload, onConflict: 'id', ignoreDuplicates: true)
+              .upsert(
+                event.payload,
+                onConflict: 'id',
+                ignoreDuplicates: true,
+              )
               .timeout(const Duration(seconds: 10));
+
           await localDataSource.acknowledge(event);
         } catch (error, stackTrace) {
-          final delaySeconds = min(300, 5 * (1 << min(event.attempts, 6)));
+          final delaySeconds = min(
+            300,
+            5 * (1 << min(event.attempts, 6)),
+          );
+
           await localDataSource.recordFailure(
             event,
             nextAttemptMs: DateTime.now()
@@ -69,18 +110,20 @@ class AnalyticsRepository {
                 ? error.code ?? 'database_error'
                 : error.runtimeType.toString(),
           );
+
           developer.log(
             'Analytics event kept for a later retry',
             name: 'AnalyticsRepository',
             error: error,
             stackTrace: stackTrace,
           );
-          // A rejected individual payload must not block later valid events.
+
           if (error is PostgrestException &&
               ((error.code ?? '').startsWith('22') ||
                   (error.code ?? '').startsWith('23'))) {
             continue;
           }
+
           return;
         }
       }

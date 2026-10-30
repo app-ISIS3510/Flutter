@@ -64,6 +64,13 @@ class VehiclesScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (controller.notice != null) ...[
+              ProfileNotice(
+                controller.notice!,
+                onRetry: controller.busy ? null : controller.load,
+              ),
+              const SizedBox(height: 16),
+            ],
             if (controller.loading)
               const Center(child: CircularProgressIndicator())
             else ...[
@@ -76,7 +83,14 @@ class VehiclesScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
               ],
-              if (empty) ...[
+              if (empty && controller.error != null) ...[
+                ProfileCard(
+                  child: Text(
+                    'Your vehicles could not be loaded. Connect and refresh before adding or choosing one.',
+                    style: profileText(15),
+                  ),
+                ),
+              ] else if (empty) ...[
                 ProfileCard(
                   color: AppColors.lightPurple,
                   child: Column(
@@ -156,6 +170,11 @@ class VehiclesScreen extends StatelessWidget {
                                   onPressed: controller.busy
                                       ? null
                                       : () async {
+                                          if (choosingVehicle &&
+                                              controller.usingSavedData) {
+                                            Navigator.pop(context, vehicle);
+                                            return;
+                                          }
                                           if (!await controller.selectVehicle(
                                                 vehicle.id,
                                               ) ||

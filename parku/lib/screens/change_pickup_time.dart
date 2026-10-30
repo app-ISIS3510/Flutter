@@ -6,6 +6,7 @@ import '../utils/user_error_message.dart';
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/pickup_widgets.dart';
+import 'profile/profile_widgets.dart';
 
 class ChangePickupTimeScreen extends StatefulWidget {
   final String initialTime;
@@ -14,6 +15,9 @@ class ChangePickupTimeScreen extends StatefulWidget {
 
   final ValueChanged<int> onNavTap;
   final Future<void> Function(String) onSave;
+  final ValueChanged<String>? onDraftChanged;
+  final String? notice;
+  final DateTime Function()? currentTime;
 
   const ChangePickupTimeScreen({
     super.key,
@@ -22,6 +26,9 @@ class ChangePickupTimeScreen extends StatefulWidget {
     required this.closingTime,
     required this.onNavTap,
     required this.onSave,
+    this.onDraftChanged,
+    this.notice,
+    this.currentTime,
   });
 
   @override
@@ -79,7 +86,7 @@ class _ChangePickupTimeScreenState extends State<ChangePickupTimeScreen> {
   }
 
   List<String> _generateAvailableTimes() {
-    final now = DateTime.now();
+    final now = widget.currentTime?.call() ?? DateTime.now();
 
     final opening = _parseParkingTime(widget.openingTime, now);
 
@@ -213,6 +220,11 @@ class _ChangePickupTimeScreenState extends State<ChangePickupTimeScreen> {
 
                     const SizedBox(height: 16),
 
+                    if (widget.notice != null) ...[
+                      ProfileNotice(widget.notice!),
+                      const SizedBox(height: 16),
+                    ],
+
                     if (hasAvailableTimes) ...[
                       Container(
                         width: double.infinity,
@@ -255,15 +267,18 @@ class _ChangePickupTimeScreenState extends State<ChangePickupTimeScreen> {
                                     child: Text(_formatTime(time)),
                                   );
                                 }).toList(),
-                                onChanged: (value) {
-                                  if (value == null) {
-                                    return;
-                                  }
+                                onChanged: isSaving
+                                    ? null
+                                    : (value) {
+                                        if (value == null) {
+                                          return;
+                                        }
 
-                                  setState(() {
-                                    selectedTime = value;
-                                  });
-                                },
+                                        setState(() {
+                                          selectedTime = value;
+                                        });
+                                        widget.onDraftChanged?.call(value);
+                                      },
                               ),
                             ),
                           ],
@@ -308,7 +323,7 @@ class _ChangePickupTimeScreenState extends State<ChangePickupTimeScreen> {
                     PickupButton(
                       text: isSaving ? 'Saving...' : 'Save pickup time',
                       onPressed: !hasAvailableTimes || isSaving
-                          ? () {}
+                          ? null
                           : _savePickupTime,
                     ),
 
@@ -332,3 +347,4 @@ class _ChangePickupTimeScreenState extends State<ChangePickupTimeScreen> {
     );
   }
 }
+
