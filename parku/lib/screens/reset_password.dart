@@ -1,10 +1,10 @@
 
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../controllers/auth_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/auth_error_message.dart';
+import '../utils/user_error_message.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   final AuthController controller;
@@ -19,8 +19,7 @@ class ResetPasswordScreen extends StatefulWidget {
   });
 
   @override
-  State<ResetPasswordScreen> createState() =>
-      _ResetPasswordScreenState();
+  State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
 }
 
 class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
@@ -37,43 +36,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   }
 
   String _friendlyError(Object error) {
-    if (error is AuthException) {
-      final message = error.message.toLowerCase();
-      final code = error.code?.toLowerCase() ?? '';
-
-      if (code == 'email_address_invalid' ||
-          message.contains('invalid email') ||
-          message.contains('email address is invalid')) {
-        return 'Please enter a valid email address.';
-      }
-
-      if (code == 'over_email_send_rate_limit' ||
-          code == 'over_request_rate_limit' ||
-          message.contains('rate limit') ||
-          message.contains('too many requests') ||
-          message.contains('for security purposes')) {
-        return 'Too many requests. Please wait a while before trying again.';
-      }
-
-      if (message.contains('network') ||
-          message.contains('connection') ||
-          message.contains('failed to fetch')) {
-        return 'Connection problem. Please check your internet and try again.';
-      }
-    }
-
-    final message = error.toString().toLowerCase();
-
-    if (message.contains('socketexception') ||
-        message.contains('clientexception') ||
-        message.contains('failed host lookup') ||
-        message.contains('connection') ||
-        message.contains('network') ||
-        message.contains('xmlhttprequest')) {
-      return 'Connection problem. Please check your internet and try again.';
-    }
-
-    return 'We could not process your request right now. Please try again later.';
+    return userErrorMessage(
+      error,
+      action: ErrorAction.resetPassword,
+    );
   }
 
   Future<void> _sendResetLink() async {
@@ -129,16 +95,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
     return InputDecoration(
       hintText: 'Email address',
-      hintStyle: const TextStyle(
-        color: AppColors.greyText,
-        fontSize: 14,
-      ),
+      hintStyle: const TextStyle(color: AppColors.greyText, fontSize: 14),
       filled: true,
       fillColor: AppColors.white,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 13,
-        vertical: 14,
-      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 14),
       enabledBorder: OutlineInputBorder(
         borderRadius: radius,
         borderSide: BorderSide(

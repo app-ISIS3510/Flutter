@@ -219,9 +219,7 @@ void main() {
     await tester.tap(find.text('Continue parking'));
     await tester.pumpAndSettle();
     expect(
-      find.text(
-        'Could not complete this request. Check your connection and try again.',
-      ),
+      find.text('We could not start your parking session. Please try again.'),
       findsOneWidget,
     );
     await pressStart(tester);

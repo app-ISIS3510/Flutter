@@ -1,11 +1,13 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/user_profile.dart';
 import '../models/vehicle.dart';
 import '../services/profile_service.dart';
 import '../services/driving_restriction_service.dart';
 import '../services/connection_failure.dart';
+import '../utils/user_error_message.dart';
 
 class ProfileController extends ChangeNotifier {
   final ProfileService service;
@@ -85,7 +87,17 @@ class ProfileController extends ChangeNotifier {
       final user = await service.getProfile();
       if (version != _version) return;
       profile = user;
-      final adminStatus = await service.isAdmin();
+      var adminStatus = false;
+      try {
+        adminStatus = await service.isAdmin();
+      } catch (error, stackTrace) {
+        // Optional admin access must not prevent loading vehicles/profile.
+        developer.log(
+          'Could not verify dashboard access',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
       if (version != _version) return;
       isAdmin = adminStatus;
       final savedVehicles = await service.getVehicles();
@@ -161,7 +173,7 @@ class ProfileController extends ChangeNotifier {
       return true;
     } catch (e) {
       if (version != _version) return false;
-      error = messageFor(e);
+      error = userErrorMessage(e, action: ErrorAction.signOut);
       busy = false;
       _notify();
       return false;
@@ -169,25 +181,12 @@ class ProfileController extends ChangeNotifier {
   }
 
   static String messageFor(Object error) {
-    if (error is ConnectionFailure) return error.message;
-    if (error is FormatException) return error.message;
-    if (error is AuthException) return error.message;
-    if (error is PostgrestException) {
-      if (error.code == '23505') {
-        return 'You have already saved this license plate.';
-      }
-      if (error.message.contains('VEHICLE_IN_USE')) {
-        return 'This vehicle has an active parking session. End it before deleting the vehicle.';
-      }
-      if (error.message.contains('VEHICLE_NOT_FOUND')) {
-        return 'This vehicle is no longer available. Refresh your vehicles.';
-      }
-      if (error.message.contains('SIGN_IN_REQUIRED')) {
-        return 'Sign in to continue.';
-      }
-    }
-    return 'Could not save or load your information. Check your connection and try again.';
+  if (error is ConnectionFailure) {
+    return error.message;
   }
+
+  return userErrorMessage(error, action: ErrorAction.profile);
+}
 
   @override
   void dispose() {

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import '../utils/user_error_message.dart';
 import '../widgets/navigation_bar.dart';
-import '../controllers/session_controller.dart';
+import '../widgets/user_error_notice.dart';
 
 class EndParkingScreen extends StatefulWidget {
   final Future<void> Function() onConfirmEndParking;
@@ -39,9 +40,7 @@ class _EndParkingScreenState extends State<EndParkingScreen> {
     } catch (error) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(SessionController.messageFor(error))),
-      );
+      showUserError(context, error, action: ErrorAction.endParking);
     } finally {
       if (mounted) {
         setState(() {
@@ -73,9 +72,7 @@ class _EndParkingScreenState extends State<EndParkingScreen> {
                           color: AppColors.darkText,
                         ),
                       ),
-
                       const SizedBox(height: 90),
-
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(24),
@@ -91,9 +88,7 @@ class _EndParkingScreenState extends State<EndParkingScreen> {
                               size: 52,
                               color: AppColors.primary,
                             ),
-
                             const SizedBox(height: 20),
-
                             const Text(
                               'Have you picked up\nyour vehicle?',
                               style: TextStyle(
@@ -103,9 +98,7 @@ class _EndParkingScreenState extends State<EndParkingScreen> {
                                 height: 1.15,
                               ),
                             ),
-
                             const SizedBox(height: 16),
-
                             const Text(
                               'Confirm to end this parking stay and stop the countdown.',
                               style: TextStyle(
@@ -114,9 +107,7 @@ class _EndParkingScreenState extends State<EndParkingScreen> {
                                 color: AppColors.greyText,
                               ),
                             ),
-
                             const SizedBox(height: 28),
-
                             SizedBox(
                               width: double.infinity,
                               height: 56,
@@ -143,9 +134,7 @@ class _EndParkingScreenState extends State<EndParkingScreen> {
                                 ),
                               ),
                             ),
-
                             const SizedBox(height: 14),
-
                             SizedBox(
                               width: double.infinity,
                               height: 56,
@@ -180,7 +169,6 @@ class _EndParkingScreenState extends State<EndParkingScreen> {
                 ),
               ),
             ),
-
             NavBar(
               currentIndex: widget.currentIndex,
               onTap: (index) {

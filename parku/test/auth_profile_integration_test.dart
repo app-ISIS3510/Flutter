@@ -18,6 +18,29 @@ import 'support/parking_fakes.dart';
 import 'package:parku/services/profile_service.dart';
 import 'package:parku/repositories/user_repository.dart';
 import 'package:parku/repositories/user_local_store.dart';
+import 'package:parku/widgets/navigation_bar.dart';
+
+Future<void> tapNavigation(
+  WidgetTester tester,
+  String label,
+) async {
+  tester
+      .state<ScaffoldMessengerState>(
+        find.byType(ScaffoldMessenger).first,
+      )
+      .clearSnackBars();
+
+  await tester.pumpAndSettle();
+
+  final target = find.descendant(
+    of: find.byType(NavBar).last,
+    matching: find.text(label),
+  ).hitTestable();
+
+  expect(target, findsOneWidget);
+  await tester.tap(target);
+  await tester.pumpAndSettle();
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -148,7 +171,7 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
       await tester.pumpAndSettle();
       parkingAvailable = true;
-      await tester.tap(find.text('Parking lots'));
+      await tapNavigation(tester, 'Parking lots');
       await tester.pumpAndSettle();
       final previousLocationCalls = location.positionCalls;
       await tester.tap(find.text('Search parking lots'));
@@ -193,7 +216,7 @@ void main() {
       await tester.enterText(find.byType(TextField).at(1), 'test-password');
       await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Profile'));
+      await tapNavigation(tester, 'Profile');
       await tester.pumpAndSettle();
       expect(find.text('Juan'), findsOneWidget);
       await tester.tap(find.text('Edit profile'));
@@ -206,7 +229,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(VehiclesScreen), findsOneWidget);
       expect(find.text('Add your first vehicle'), findsOneWidget);
-      await tester.tap(find.text('Profile'));
+      await tapNavigation(tester, 'Profile');
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Sign out'));
       await tester.tap(find.text('Sign out'));
@@ -248,11 +271,11 @@ void main() {
     await tester.enterText(find.byType(TextField).at(1), 'test-password');
     await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Profile'));
+    await tapNavigation(tester, 'Profile');
     await tester.pumpAndSettle();
     expect(find.text('Analytics dashboard'), findsNothing);
     parkingAvailable = true;
-    await tester.tap(find.text('Parking lots'));
+    await tapNavigation(tester, 'Parking lots');
     await tester.pumpAndSettle();
     expect(find.text('Most used parking lots this week'), findsOneWidget);
     await tester.ensureVisible(find.text('8 completed sessions'));
@@ -293,7 +316,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     await tester.pumpAndSettle();
     parkingAvailable = true;
-    await tester.tap(find.text('Parking lots'));
+    await tapNavigation(tester, 'Parking lots');
     await tester.pumpAndSettle();
     favoritesFail = true;
     await tester.ensureVisible(find.text('8 completed sessions'));

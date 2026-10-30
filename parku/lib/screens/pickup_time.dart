@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../utils/user_error_message.dart';
+import '../widgets/user_error_notice.dart';
+
 import '../theme/app_theme.dart';
 import '../models/vehicle.dart';
-import '../controllers/session_controller.dart';
 import '../services/driving_restriction_service.dart';
 import '../widgets/design_icon.dart';
 import '../widgets/navigation_bar.dart';
@@ -180,9 +182,7 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
       if (!mounted) return;
       setState(() => _requestFailed = true);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(SessionController.messageFor(error))),
-      );
+      showUserError(context, error, action: ErrorAction.startParking);
     } finally {
       if (mounted) {
         setState(() {

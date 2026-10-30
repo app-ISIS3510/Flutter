@@ -1,10 +1,10 @@
 
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../controllers/auth_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/auth_error_message.dart';
+import '../utils/user_error_message.dart';
 
 class CreateAccountScreen extends StatefulWidget {
   final AuthController controller;
@@ -42,70 +42,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     super.dispose();
   }
 
-  String _friendlyError(Object error) {
-    if (error is AuthException) {
-      final message = error.message.toLowerCase();
-      final code = error.code?.toLowerCase() ?? '';
-
-      if (code == 'user_already_exists' ||
-          code == 'email_exists' ||
-          message.contains('already registered') ||
-          message.contains('already exists')) {
-        return 'This email is already registered. Try signing in instead.';
-      }
-
-      if (code == 'email_address_invalid' ||
-          message.contains('invalid email') ||
-          message.contains('email address is invalid')) {
-        return 'Please enter a valid email address.';
-      }
-
-      if (code == 'weak_password' ||
-          message.contains('password should') ||
-          message.contains('password is too weak') ||
-          message.contains('password is too short')) {
-        return 'Please choose a stronger password that meets the security requirements.';
-      }
-
-      if (code == 'signup_disabled' ||
-          message.contains('signups not allowed') ||
-          message.contains('signup is disabled')) {
-        return 'Account creation is temporarily unavailable. Please try again later.';
-      }
-
-      if (code == 'over_email_send_rate_limit' ||
-          code == 'over_request_rate_limit' ||
-          message.contains('rate limit') ||
-          message.contains('too many requests')) {
-        return 'Too many attempts. Please wait a while before trying again.';
-      }
-
-      if (message.contains('network') ||
-          message.contains('connection') ||
-          message.contains('failed to fetch')) {
-        return 'Connection problem. Please check your internet and try again.';
-      }
-
-      if (message.contains('database error') ||
-          message.contains('unexpected failure')) {
-        return 'We could not create your account right now. Please try again later.';
-      }
-    }
-
-    final message = error.toString().toLowerCase();
-
-    if (message.contains('socketexception') ||
-        message.contains('clientexception') ||
-        message.contains('failed host lookup') ||
-        message.contains('connection') ||
-        message.contains('network') ||
-        message.contains('xmlhttprequest')) {
-      return 'Connection problem. Please check your internet and try again.';
-    }
-
-    return 'Something went wrong while creating your account. Please try again.';
-  }
-
   Future<void> _createAccount() async {
     if (isLoading) return;
 
@@ -123,9 +59,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
     if (email.isEmpty) {
       newEmailError = 'Please enter your email address.';
-    } else if (!RegExp(
-      r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
-    ).hasMatch(email)) {
+    } else if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
       newEmailError = 'Please enter a valid email address.';
     }
 
@@ -171,7 +105,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           response.user!.identities != null &&
           response.user!.identities!.isEmpty) {
         setState(() {
-          authError = 'If this email is already registered, try signing in or resetting your password.';
+          authError =
+              'If this email is already registered, try signing in or resetting your password.';
         });
         return;
       }
@@ -184,7 +119,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       if (!mounted) return;
 
       setState(() {
-        authError = _friendlyError(error);
+        authError = userErrorMessage(
+          error,
+          action: ErrorAction.createAccount,
+        );
       });
     } finally {
       if (mounted) {

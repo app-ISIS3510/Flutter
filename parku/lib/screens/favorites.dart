@@ -11,6 +11,9 @@ class FavoritesScreen extends StatelessWidget {
   final ValueChanged<Parking> onRemove;
   final ValueChanged<int> onNavTap;
   final ValueChanged<Map<String, String>> onSelectParking;
+  final String? storageNotice;
+  final VoidCallback? onRefresh;
+  final Set<String> pendingRemovalIds;
 
   const FavoritesScreen({
     super.key,
@@ -18,6 +21,9 @@ class FavoritesScreen extends StatelessWidget {
     required this.onRemove,
     required this.onNavTap,
     required this.onSelectParking,
+    this.storageNotice,
+    this.onRefresh,
+    this.pendingRemovalIds = const {},
   });
 
   Map<String, String> _parkingToMap(Parking parking) {
@@ -45,16 +51,15 @@ class FavoritesScreen extends StatelessWidget {
           children: [
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(
-                  24,
-                  18,
-                  24,
-                  24,
-                ),
+                padding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
                 children: [
-                  const ScreenHeader(
-                    title: 'Favorites',
-                  ),
+                  const ScreenHeader(title: 'Favorites'),
+                  if (storageNotice != null) Text(storageNotice!),
+                  if (onRefresh != null)
+                    TextButton(
+                      onPressed: onRefresh,
+                      child: const Text('Refresh favorites'),
+                    ),
 
                   const SizedBox(height: 33),
 
@@ -72,9 +77,7 @@ class FavoritesScreen extends StatelessWidget {
                   for (final parking in favorites) ...[
                     InkWell(
                       onTap: () {
-                        onSelectParking(
-                          _parkingToMap(parking),
-                        );
+                        onSelectParking(_parkingToMap(parking));
                       },
                       borderRadius: BorderRadius.circular(20),
                       child: Container(
@@ -87,8 +90,7 @@ class FavoritesScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const DesignIcon('heart'),
                                 const SizedBox(width: 10),
@@ -124,13 +126,17 @@ class FavoritesScreen extends StatelessWidget {
                             const SizedBox(height: 8),
 
                             PickupButton(
-                              text: 'Remove',
+                              text: pendingRemovalIds.contains(parking.id)
+                                  ? 'Removing...'
+                                  : 'Remove',
                               height: 44,
                               background: AppColors.white,
                               foreground: AppColors.primary,
-                              onPressed: () {
-                                onRemove(parking);
-                              },
+                              onPressed: pendingRemovalIds.contains(parking.id)
+                                  ? null
+                                  : () {
+                                      onRemove(parking);
+                                    },
                             ),
                           ],
                         ),
@@ -143,10 +149,7 @@ class FavoritesScreen extends StatelessWidget {
               ),
             ),
 
-            NavBar(
-              currentIndex: 2,
-              onTap: onNavTap,
-            ),
+            NavBar(currentIndex: 2, onTap: onNavTap),
           ],
         ),
       ),

@@ -1,37 +1,48 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
-import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../controllers/analytics_controller.dart';
+import '../controllers/connection_controller.dart';
 import '../controllers/favorite_controller.dart';
 import '../controllers/navigation_controller.dart';
 import '../controllers/parking_controller.dart';
 import '../controllers/profile_controller.dart';
 import '../controllers/session_controller.dart';
-import '../controllers/connection_controller.dart';
+import '../models/analytics_measurements.dart';
 import '../models/parking.dart';
 import '../models/parking_session.dart';
 import '../models/vehicle.dart';
 import '../repositories/analytics_repository.dart';
 import '../repositories/favorite_repository.dart';
 import '../repositories/parking_repository.dart';
-import '../repositories/session_repository.dart';
-import '../repositories/user_repository.dart';
-import '../repositories/user_local_store.dart';
 import '../repositories/personal_data_repository.dart';
+import '../repositories/session_repository.dart';
+import '../repositories/user_local_store.dart';
+import '../repositories/user_repository.dart';
 import '../services/analytics_service.dart';
+import '../services/connection_failure.dart';
+import '../services/connectivity_service.dart';
 import '../services/distance_manager.dart';
 import '../services/favorite_service.dart';
+import '../services/favorite_sync_service.dart';
 import '../services/navigation_service.dart';
 import '../services/parking_service.dart';
+import '../services/pickup_analytics_service.dart';
 import '../services/profile_service.dart';
 import '../services/session_service.dart';
 import '../services/shared_dashboard_service.dart';
-import '../services/connection_failure.dart';
-import '../services/pickup_analytics_service.dart';
+import '../state/favorite_list_state.dart';
+import '../state/favorite_status_state.dart';
+import '../state/parking_detail_state.dart';
 import '../state/session_state.dart';
+import '../utils/screen_load_reporter.dart';
+import '../utils/user_error_message.dart';
+import '../widgets/managed_future_builder.dart';
+import '../widgets/user_error_notice.dart';
 import 'change_pickup_time.dart';
 import 'favorites.dart';
 import 'home.dart';
@@ -41,10 +52,10 @@ import 'no_favorites.dart';
 import 'parking_detail.dart';
 import 'parking_list.dart';
 import 'pickup_time.dart';
-import 'profile/profile_screen.dart';
 import 'profile/parking_history_screen.dart';
-import 'profile/vehicles_screen.dart';
+import 'profile/profile_screen.dart';
 import 'profile/profile_widgets.dart';
+import 'profile/vehicles_screen.dart';
 import 'search.dart';
 import 'search_results.dart';
 
@@ -84,6 +95,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   late final FavoriteRepository favoriteRepository;
   late final FavoriteService favoriteService;
   late final FavoriteController favoriteController;
+  late final FavoriteSyncService favoriteSyncService;
 
   late final NavigationService navigationService;
   late final NavigationController navigationController;
@@ -93,33 +105,80 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   late final AnalyticsController analyticsController;
   late final PickupAnalyticsService pickupAnalytics;
 
-  final sharedDashboardService = SharedDashboardService();
-
   late final DistanceManager distanceManager;
-
   late final ProfileController profileController;
   late final UserLocalStore localStore;
   late final ConnectionController connection;
-  String? _lastConnectionNotice;
+
+  final sharedDashboardService = SharedDashboardService();
+  final _connection = ConnectivityService();
+  final Set<String> _removingFavoriteIds = {};
+
   StreamSubscription<AuthState>? _authSubscription;
   String? _userId;
+  String? _lastConnectionNotice;
+  String? _sessionLoadError;
+  ScreenLoadReporter? _myParkingLoad;
 
   int currentIndex = 0;
+  int _favoritesRequestVersion = 0;
+  int _myParkingRequestVersion = 0;
+
   bool showingMyParking = false;
   bool isLoadingSession = false;
   bool isOpeningSearch = false;
-  String? _sessionError;
-  Future<Parking?>? _sessionParking;
-  String? _sessionParkingId;
-  bool _usingSavedParking = false;
+  bool _isOpeningPickup = false;
+  bool _isOpeningPickupChange = false;
+
+  bool _sameUser(String? owner) =>
+      mounted &&
+      owner != null &&
+      owner == _userId &&
+      owner == Supabase.instance.client.auth.currentUser?.id;
+
+  void _requireUser(String? owner) {
+    if (!_sameUser(owner)) {
+      throw const AuthException('The signed-in account changed.');
+    }
+  }
+
+  void _track({
+    required String eventType,
+    required String screen,
+    String? parkingId,
+    Map<String, dynamic>? metadata,
+  }) {
+    unawaited(
+      analyticsController
+          .track(
+            eventType: eventType,
+            screen: screen,
+            parkingId: parkingId,
+            metadata: metadata,
+          )
+          .catchError((Object _) {}),
+    );
+  }
 
   DateTime _buildPickupDateTime(String time) {
     final parts = time.split(':');
-    final hour = int.parse(parts[0]);
-    final minute = int.parse(parts[1]);
     final now = widget.currentTime?.call() ?? DateTime.now();
 
-    return DateTime(now.year, now.month, now.day, hour, minute);
+    return DateTime(
+      now.year,
+      now.month,
+      now.day,
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+    );
+  }
+
+  String _formatTimeForPicker(DateTime dateTime) {
+    final local = dateTime.toLocal();
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+
+    return '$hour:$minute';
   }
 
   @override
@@ -127,7 +186,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     super.initState();
 
     final supabase = Supabase.instance.client;
+    _userId = supabase.auth.currentUser?.id;
+
     localStore = UserLocalStore(supabase);
+    final personalData = PersonalDataRepository();
+
     analyticsRepository = AnalyticsRepository(supabase);
     pickupAnalytics = PickupAnalyticsService(
       analyticsRepository,
@@ -135,7 +198,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           widget.profileService?.store ??
           localStore,
     );
-    final personalData = PersonalDataRepository();
+    analyticsService = AnalyticsService(analyticsRepository);
+    analyticsController = AnalyticsController(analyticsService);
+    analyticsService.start();
 
     parkingRepository = ParkingRepository(supabase);
     distanceManager = DistanceManager();
@@ -157,12 +222,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     favoriteRepository = FavoriteRepository(supabase);
     favoriteService = FavoriteService(favoriteRepository);
     favoriteController = FavoriteController(favoriteService);
+    favoriteSyncService = FavoriteSyncService(favoriteRepository);
+    favoriteSyncService.addListener(_onFavoriteSync);
+    favoriteSyncService.start();
 
     navigationService = NavigationService.create();
     navigationController = NavigationController(navigationService);
-
-    analyticsService = AnalyticsService(analyticsRepository);
-    analyticsController = AnalyticsController(analyticsService);
 
     profileController = ProfileController(
       widget.profileService ??
@@ -173,42 +238,51 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           ),
     );
 
-    _userId = supabase.auth.currentUser?.id;
+    _authSubscription = supabase.auth.onAuthStateChange.listen(
+      (state) {
+        if (!mounted) return;
 
-    _authSubscription = supabase.auth.onAuthStateChange.listen((state) {
-      final nextUser = state.session?.user.id;
+        final nextUser = state.session?.user.id;
 
-      if (!mounted) return;
-
-      if (nextUser == _userId) {
-        if (state.event == AuthChangeEvent.userUpdated &&
-            !profileController.busy) {
-          profileController.load();
+        if (nextUser == _userId) {
+          if (state.event == AuthChangeEvent.userUpdated &&
+              !profileController.busy) {
+            unawaited(profileController.load());
+          }
+          return;
         }
-        return;
-      }
 
-      _userId = nextUser;
-      profileController.clear();
-      sessionController.clear();
-      _sessionParking = null;
-      _sessionParkingId = null;
-      _sessionError = null;
-      _returnToMain();
+        _userId = nextUser;
+        _myParkingLoad?.cancel();
+        _myParkingRequestVersion++;
+        _favoritesRequestVersion++;
+        _removingFavoriteIds.clear();
 
-      setState(() {
-        showingMyParking = false;
-        if (nextUser == null) {
+        profileController.clear();
+        sessionController.clear();
+        _returnToMain();
+
+        setState(() {
+          isLoadingSession = false;
+          _sessionLoadError = null;
+          showingMyParking = false;
           currentIndex = 0;
-        }
-      });
+        });
 
-      if (nextUser == null) {
-        widget.onSignedOut?.call();
-      } else {
-        profileController.load();
-      }
-    });
+        if (nextUser == null) {
+          widget.onSignedOut?.call();
+        } else {
+          unawaited(profileController.load());
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        developer.log(
+          'Could not observe authentication changes',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      },
+    );
 
     connection = ConnectionController(
       onReconnect: _refreshAfterReconnect,
@@ -216,6 +290,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       checkConnection: widget.checkConnection,
     );
     connection.addListener(_showConnectionNotice);
+
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(connection.start());
@@ -224,46 +299,46 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
   Future<void> _refreshAfterReconnect() async {
     final owner = _userId;
-    if (owner == null) return;
+    if (!_sameUser(owner)) return;
+
+    unawaited(analyticsService.flushPending());
+    unawaited(favoriteSyncService.flush());
     unawaited(pickupAnalytics.flush());
+
     if (profileController.busy ||
         profileController.loading ||
-        sessionController.busy) {
+        sessionController.busy ||
+        isLoadingSession) {
       throw const ConnectionFailure(
-        'A request is still in progress. Refresh your information when it finishes.',
+        'A request is still in progress. Refresh when it finishes.',
       );
     }
 
     await profileController.load();
-    if (!mounted || owner != _userId) return;
-    Object? sessionError;
-    try {
-      await sessionController.loadActiveSession();
-    } catch (error) {
-      sessionError = error;
-    }
-    if (!mounted || owner != _userId) return;
+    if (!_sameUser(owner)) return;
+
     if (showingMyParking) {
-      setState(() {
-        _sessionError = sessionError == null
-            ? null
-            : SessionController.messageFor(sessionError);
-        _sessionParking = null;
-        _sessionParkingId = null;
-      });
+      await openMyParking();
+    } else {
+      await sessionController.loadActiveSession();
     }
-    if (sessionError != null ||
+
+    if (!_sameUser(owner)) return;
+
+    if (_sessionLoadError != null ||
         profileController.error != null ||
         profileController.usingSavedData ||
-        sessionService.usingSavedSession) {
+        sessionService.usingSavedSession ||
+        sessionState.isFromCache) {
       throw const ConnectionFailure(
-        'The network is available, but some information could not be confirmed with the server. Refresh to retry.',
+        'Some information could not be refreshed. Please try again later.',
       );
     }
+
     if (sessionService.pendingRequest != null ||
         profileController.pendingChange != null) {
       throw const ConnectionFailure(
-        'A previous request is still unconfirmed. Check your information before retrying it.',
+        'A previous request is unconfirmed. Check its status before retrying.',
       );
     }
   }
@@ -271,38 +346,47 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   void _showConnectionNotice() {
     final message = connection.notice;
     if (!mounted || message == _lastConnectionNotice) return;
+
     _lastConnectionNotice = message;
-    if (message == null || connection.checking) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 90),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+
+    if (message != null && !connection.checking) {
+      showUserMessage(context, message);
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      unawaited(analyticsService.flushPending());
+      unawaited(favoriteSyncService.flush());
+      unawaited(pickupAnalytics.flush());
       unawaited(connection.recheck(refresh: true));
     }
   }
 
   @override
   void dispose() {
+    _myParkingLoad?.cancel();
     WidgetsBinding.instance.removeObserver(this);
+
     connection.removeListener(_showConnectionNotice);
     connection.dispose();
+
+    analyticsService.dispose();
+    favoriteSyncService.removeListener(_onFavoriteSync);
+    favoriteSyncService.dispose();
+
     _authSubscription?.cancel();
     profileController.dispose();
     sessionController.dispose();
     sessionState.dispose();
+
     super.dispose();
   }
 
   void _returnToMain() {
+    if (!mounted) return;
+
     final mainRoute = ModalRoute.of(context);
 
     if (mainRoute != null) {
@@ -315,8 +399,109 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     changePage(index);
   }
 
+  void changePage(int index) {
+    if (!mounted) return;
+
+    _myParkingLoad?.cancel();
+    _myParkingRequestVersion++;
+
+    setState(() {
+      if (index == 2 && currentIndex != 2) {
+        _favoritesRequestVersion++;
+      }
+      currentIndex = index;
+      showingMyParking = false;
+      isLoadingSession = false;
+      _sessionLoadError = null;
+    });
+  }
+
+  void _onFavoriteSync() {
+    if (mounted && currentIndex == 2) {
+      _refreshFavorites();
+    }
+  }
+
+  void _refreshFavorites() {
+    if (mounted) {
+      setState(() => _favoritesRequestVersion++);
+    }
+  }
+
+  Future<void> _removeFavorite(String parkingId) async {
+    final owner = _userId;
+
+    if (!_sameUser(owner) || _removingFavoriteIds.contains(parkingId)) {
+      return;
+    }
+
+    setState(() => _removingFavoriteIds.add(parkingId));
+
+    try {
+      await favoriteController.removeFavorite(parkingId);
+      if (!_sameUser(owner)) return;
+
+      _track(
+        eventType: 'favorite_removed',
+        screen: 'favorites',
+        parkingId: parkingId,
+      );
+
+      _refreshFavorites();
+    } catch (error) {
+      if (_sameUser(owner)) {
+        showUserError(context, error, action: ErrorAction.favorites);
+      }
+    } finally {
+      if (_sameUser(owner)) {
+        setState(() => _removingFavoriteIds.remove(parkingId));
+      }
+    }
+  }
+
+  void _showRequestError(Object error, ErrorAction action) {
+    if (!mounted) return;
+
+    if (error is ConnectionFailure) {
+      showUserMessage(context, error.message);
+    } else {
+      showUserError(context, error, action: action);
+    }
+  }
+
+  Future<T> _parkingRequest<T>(Future<T> Function() request) async {
+    try {
+      return await request();
+    } on ConnectionFailure catch (error) {
+      throw UserInputException(error.message);
+    }
+  }
+
+  Widget _loadFailure(
+    String message,
+    VoidCallback retry, {
+    String title = 'ParkU',
+  }) => ProfilePage(
+    title: title,
+    onNavTap: changePage,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ProfileError(message),
+        const SizedBox(height: 16),
+        ProfileButton(text: 'Retry', onPressed: retry),
+        TextButton(
+          onPressed: () => changePage(1),
+          child: const Text('Parking lots'),
+        ),
+      ],
+    ),
+  );
+
   void openParkingHistory() {
-    Navigator.push(
+    if (!mounted) return;
+
+    Navigator.push<void>(
       context,
       MaterialPageRoute<void>(
         builder: (_) => ParkingHistoryScreen(
@@ -330,7 +515,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   Future<Vehicle?> _chooseVehicle() {
     return Navigator.push<Vehicle>(
       context,
-      MaterialPageRoute(
+      MaterialPageRoute<Vehicle>(
         builder: (_) => VehiclesScreen(
           controller: profileController,
           onNavTap: _profileNavTap,
@@ -346,70 +531,79 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     try {
       await sharedDashboardService.open();
     } catch (_) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not open the analytics dashboard. Please try again.',
-          ),
-        ),
-      );
+      if (mounted) {
+        showUserMessage(
+          context,
+          'Could not open the analytics dashboard. Please try again later.',
+        );
+      }
     }
-  }
-
-  void _showRequestError(Object error) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(SessionController.messageFor(error))),
-    );
   }
 
   void _savePickupDraft(String key, String time, {String? vehicleId}) {
     final owner = _userId;
+
     unawaited(
       sessionService
-          .savePickupDraft(key, {'time': time, 'vehicle_id': vehicleId})
+          .savePickupDraft(
+            key,
+            {'time': time, 'vehicle_id': vehicleId},
+          )
           .catchError((Object _) {
-            if (!mounted || owner != _userId) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Your selection is still on screen, but could not be saved for reopening.',
-                ),
-              ),
-            );
+            if (_sameUser(owner)) {
+              showUserMessage(
+                context,
+                'Could not save your selection on this device.',
+              );
+            }
           }),
     );
   }
 
-  Future<Parking?> _loadSessionParking(String id) async {
+  Future<ParkingDetailState> _loadSessionParking(String id) async {
     final owner = _userId;
-    _usingSavedParking = false;
+    _requireUser(owner);
+
     try {
-      final parking = await parkingController
-          .loadParkingById(id)
+      final details = await parkingController
+          .loadParkingDetails(id)
           .timeout(sessionService.requestTimeout);
-      if (!mounted || owner != _userId) return null;
-      if (parking != null) await sessionService.saveParking(parking);
-      return parking;
+
+      _requireUser(owner);
+
+      if (details.parking != null) {
+        await sessionService.saveParking(details.parking!);
+        _requireUser(owner);
+        return details;
+      }
+
+      final saved = await sessionService.getSavedParking(id);
+      _requireUser(owner);
+
+      return saved == null
+          ? details
+          : ParkingDetailState(parking: saved, isFromCache: true);
     } catch (error) {
       if (!isConnectionError(error)) rethrow;
+
+      _requireUser(owner);
       final saved = await sessionService.getSavedParking(id);
-      if (!mounted || owner != _userId) return null;
+      _requireUser(owner);
+
       if (saved == null) {
         throw const ConnectionFailure(
           'No parking details are saved. Reconnect and refresh My parking.',
         );
       }
-      _usingSavedParking = true;
-      return saved;
+
+      return ParkingDetailState(parking: saved, isFromCache: true);
     }
   }
 
   Future<void> _saveParkingPreview(Map<String, String> parking) async {
     final id = parking['id'];
-    if (id == null) return;
+    if (id == null || id.isEmpty) return;
+
     await sessionService.saveParking(
       Parking.fromMap({
         'id': id,
@@ -417,6 +611,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         'address': parking['address'] ?? '',
         'latitude': double.tryParse(parking['latitude'] ?? ''),
         'longitude': double.tryParse(parking['longitude'] ?? ''),
+        'car_spaces': int.tryParse(parking['carSpaces'] ?? '') ?? 0,
+        'motorcycle_spaces':
+            int.tryParse(parking['motorcycleSpaces'] ?? '') ?? 0,
         'opening_time': parking['openingTime'],
         'closing_time': parking['closingTime'],
         'image_url': parking['imageUrl'],
@@ -426,57 +623,38 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     );
   }
 
-  String _formatTimeForPicker(DateTime dateTime) {
-    final local = dateTime.toLocal();
-    final hour = local.hour.toString().padLeft(2, '0');
-    final minute = local.minute.toString().padLeft(2, '0');
-
-    return '$hour:$minute';
-  }
-
-  void changePage(int index) {
-    setState(() {
-      currentIndex = index;
-      showingMyParking = false;
-    });
-  }
-
   Future<void> openSearch() async {
-    if (isOpeningSearch) return;
+    if (isOpeningSearch || !mounted) return;
+
     isOpeningSearch = true;
-    final userId = _userId;
+    final owner = _userId;
 
     try {
-      await profileController.load();
-      if (!mounted || userId != _userId) return;
+      unawaited(profileController.load());
+      if (!_sameUser(owner)) return;
 
-      await Navigator.push(
+      await Navigator.push<void>(
         context,
         MaterialPageRoute<void>(
-          builder: (context) => ListenableBuilder(
+          builder: (_) => ListenableBuilder(
             listenable: profileController,
             builder: (context, child) => SearchScreen(
+              analytics: analyticsController,
               currentIndex: 1,
               parkingController: parkingController,
-              selectedVehicle: profileController.error == null
-                  ? profileController.selectedVehicle
-                  : null,
-              onNavTap: (index) {
-                Navigator.pop(context);
-                changePage(index);
-              },
+              selectedVehicle: profileController.selectedVehicle,
+              onSelectParking: openParkingDetail,
+              onNavTap: _profileNavTap,
               onSearch: (query) {
-                Navigator.push(
+                Navigator.push<void>(
                   context,
                   MaterialPageRoute<void>(
-                    builder: (context) => SearchResultsScreen(
+                    builder: (_) => SearchResultsScreen(
+                      analytics: analyticsController,
                       initialQuery: query,
                       currentIndex: 1,
                       parkingController: parkingController,
-                      onNavTap: (index) {
-                        _returnToMain();
-                        changePage(index);
-                      },
+                      onNavTap: _profileNavTap,
                       onSelectParking: openParkingDetail,
                     ),
                   ),
@@ -486,149 +664,266 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           ),
         ),
       );
+    } catch (error) {
+      if (_sameUser(owner)) {
+        _showRequestError(error, ErrorAction.load);
+      }
     } finally {
       isOpeningSearch = false;
     }
   }
 
-  void openParkingDetail(Map<String, String> parking) async {
+  Future<void> openParkingDetail(Map<String, String> parking) async {
     final parkingId = parking['id'];
 
-    if (parkingId == null || parkingId.isEmpty) {
-      return;
-    }
+    if (parkingId == null || parkingId.isEmpty) return;
+    if (!_sameUser(_userId)) return;
 
-    unawaited(
-      analyticsController
-          .track(
-            eventType: 'parking_detail_viewed',
-            screen: 'parking_detail',
-            parkingId: parkingId,
-          )
-          .catchError((Object _) {}),
+    final detailUserId = _userId;
+    final detailVisit = ParkingDetailVisit(parkingId);
+
+    final favoriteStatus = ValueNotifier<FavoriteStatusState>(
+      const FavoriteStatusState(isBusy: true),
     );
 
-    bool isFavorite;
+    var detailIsOpen = true;
+    var favoriteIsSaving = false;
+    var favoriteIsLoading = false;
+
+    Future<void> loadFavoriteStatus() async {
+      if (!detailIsOpen ||
+          !mounted ||
+          detailUserId != _userId ||
+          favoriteIsLoading) {
+        return;
+      }
+
+      favoriteIsLoading = true;
+
+      favoriteStatus.value = FavoriteStatusState(
+        isFavorite: favoriteStatus.value.isFavorite,
+        isBusy: true,
+      );
+
+      try {
+        final value = await favoriteController
+            .isFavorite(parkingId)
+            .timeout(const Duration(seconds: 15));
+
+        if (detailIsOpen && mounted && detailUserId == _userId) {
+          favoriteStatus.value = FavoriteStatusState(isFavorite: value);
+        }
+      } catch (error, stackTrace) {
+        developer.log(
+          'Could not load favorite status for parking details',
+          error: error,
+          stackTrace: stackTrace,
+        );
+
+        if (detailIsOpen && mounted && detailUserId == _userId) {
+          favoriteStatus.value = FavoriteStatusState(
+            isFavorite: favoriteStatus.value.isFavorite,
+            errorMessage: userErrorMessage(
+              error,
+              action: ErrorAction.favorites,
+            ),
+          );
+        }
+      } finally {
+        favoriteIsLoading = false;
+      }
+    }
+
+    unawaited(loadFavoriteStatus());
+
     try {
-      isFavorite = await favoriteController
-          .isFavorite(parkingId)
-          .timeout(const Duration(seconds: 8));
-    } catch (_) {
-      _showRequestError(
-        const ConnectionFailure(
-          'Could not open this parking lot. Check your connection and try again.',
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute<void>(
+          builder: (context) {
+            return ValueListenableBuilder<FavoriteStatusState>(
+              valueListenable: favoriteStatus,
+              builder: (context, favoriteState, child) {
+                return ParkingDetailScreen(
+                  parking: parking,
+                  parkingController: parkingController,
+                  currentIndex: 1,
+                  isFavorite: favoriteState.isFavorite ?? false,
+                  isFavoriteBusy: favoriteState.isBusy,
+                  favoriteErrorMessage: favoriteState.errorMessage,
+                  navigationController: navigationController,
+                  analyticsController: analyticsController,
+                  visit: detailVisit,
+                  onToggleFavorite: favoriteState.isFavorite == null
+                      ? () {
+                          showUserMessage(
+                            context,
+                            favoriteState.errorMessage ??
+                                'Checking favorites. Please wait.',
+                          );
+
+                          if (!favoriteState.isBusy) {
+                            unawaited(loadFavoriteStatus());
+                          }
+                        }
+                      : () async {
+                          if (favoriteIsSaving) return;
+                          favoriteIsSaving = true;
+
+                          try {
+                            favoriteStatus.value = FavoriteStatusState(
+                              isFavorite: favoriteState.isFavorite,
+                              isBusy: true,
+                            );
+
+                            final nextIsFavorite = await favoriteController
+                                .toggleFavorite(parkingId);
+
+                            if (analyticsController.currentUserId ==
+                                detailUserId) {
+                              _track(
+                                eventType: nextIsFavorite
+                                    ? 'favorite_added'
+                                    : 'favorite_removed',
+                                screen: 'parking_detail',
+                                parkingId: parkingId,
+                                metadata: detailVisit.favoriteMetadata(
+                                  nextIsFavorite,
+                                ),
+                              );
+                            }
+
+                            if (!context.mounted ||
+                                !detailIsOpen ||
+                                detailUserId != _userId) {
+                              return;
+                            }
+
+                            favoriteStatus.value = FavoriteStatusState(
+                              isFavorite: nextIsFavorite,
+                            );
+
+                            _refreshFavorites();
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Favorite saved. It will sync when online.',
+                                ),
+                              ),
+                            );
+                          } catch (error) {
+                            if (!context.mounted ||
+                                !detailIsOpen ||
+                                detailUserId != _userId) {
+                              return;
+                            }
+
+                            favoriteStatus.value = favoriteState;
+
+                            showUserError(
+                              context,
+                              error,
+                              action: ErrorAction.favorites,
+                            );
+                          } finally {
+                            favoriteIsSaving = false;
+                          }
+                        },
+                  onNavTap: (index) {
+                    _returnToMain();
+                    changePage(index);
+                  },
+                  onParkHere: (selectedParking) {
+                    openPickupTime({
+                      ...parking,
+                      'id': selectedParking.id,
+                      'name': selectedParking.name,
+                      'address': selectedParking.address,
+                      'latitude':
+                          selectedParking.latitude?.toString() ?? '',
+                      'longitude':
+                          selectedParking.longitude?.toString() ?? '',
+                      'carSpaces':
+                          selectedParking.availableCarSpaces.toString(),
+                      'motorcycleSpaces':
+                          selectedParking.availableMotorcycleSpaces.toString(),
+                      'pricePerMinute':
+                          selectedParking.pricePerMinute.toString(),
+                      'openingTime': selectedParking.openingTime ?? '',
+                      'closingTime': selectedParking.closingTime ?? '',
+                      'imageUrl': selectedParking.imageUrl ?? '',
+                    });
+                  },
+                );
+              },
+            );
+          },
         ),
       );
-      return;
+    } finally {
+      detailIsOpen = false;
+      favoriteStatus.dispose();
     }
-
-    if (!mounted) return;
-
-    Navigator.push(
-      context,
-      MaterialPageRoute<void>(
-        builder: (context) {
-          return StatefulBuilder(
-            builder: (context, refreshDetail) {
-              return ParkingDetailScreen(
-                parking: parking,
-                currentIndex: 1,
-                isFavorite: isFavorite,
-                navigationController: navigationController,
-                analyticsController: analyticsController,
-                onToggleFavorite: () async {
-                  try {
-                    final wasFavorite = isFavorite;
-
-                    await favoriteController.toggleFavorite(parkingId);
-                    isFavorite = await favoriteController.isFavorite(parkingId);
-
-                    if (!context.mounted) return;
-                    refreshDetail(() {});
-
-                    unawaited(
-                      analyticsController
-                          .track(
-                            eventType: wasFavorite
-                                ? 'favorite_removed'
-                                : 'favorite_added',
-                            screen: 'parking_detail',
-                            parkingId: parkingId,
-                          )
-                          .catchError((Object _) {}),
-                    );
-                  } catch (error) {
-                    if (!context.mounted) return;
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(ProfileController.messageFor(error)),
-                      ),
-                    );
-                  }
-                },
-                onNavTap: (index) {
-                  _returnToMain();
-                  changePage(index);
-                },
-                onParkHere: () {
-                  openPickupTime(parking);
-                },
-              );
-            },
-          );
-        },
-      ),
-    );
   }
 
   Future<void> openPickupTime(Map<String, String> parking) async {
+    if (_isOpeningPickup || !mounted) return;
+
+    _isOpeningPickup = true;
     final owner = _userId;
+
     try {
       await profileController.load();
-
-      if (!mounted || owner != _userId) return;
+      if (!_sameUser(owner)) return;
 
       if (profileController.error != null) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(profileController.error!)));
+        showUserMessage(
+          context,
+          'Could not load your vehicle. Please try again later.',
+        );
         return;
       }
 
       final parkingId = parking['id'];
-      if (parkingId == null) {
-        throw const FormatException('Parking information is missing.');
+
+      if (parkingId == null || parkingId.isEmpty) {
+        throw const UserInputException('Parking information is missing.');
       }
+
       await _saveParkingPreview(parking);
+      _requireUser(owner);
+
       final draft = await sessionService.getPickupDraft('start_$parkingId');
+      _requireUser(owner);
+
       await sessionService.restorePendingRequest();
-      if (!mounted || owner != _userId) return;
+      if (!_sameUser(owner)) return;
 
       var vehicle = profileController.selectedVehicle;
+
       for (final savedVehicle in profileController.vehicles) {
-        if (savedVehicle.id == draft?['vehicle_id']) vehicle = savedVehicle;
+        if (savedVehicle.id == draft?['vehicle_id']) {
+          vehicle = savedVehicle;
+        }
       }
+
       vehicle ??= await _chooseVehicle();
 
-      if (vehicle == null || !mounted || owner != _userId) return;
+      if (vehicle == null || !_sameUser(owner)) return;
 
-      if (parkingId.isNotEmpty) {
-        unawaited(
-          analyticsController
-              .track(
-                eventType: 'pickup_time_viewed',
-                screen: 'pickup_time',
-                parkingId: parkingId,
-              )
-              .catchError((Object _) {}),
-        );
-      }
+      _track(
+        eventType: 'pickup_time_viewed',
+        screen: 'pickup_time',
+        parkingId: parkingId,
+      );
 
       String? suggestedTime;
-      Navigator.push(
+
+      await Navigator.push<void>(
         context,
         MaterialPageRoute<void>(
-          builder: (context) => PickupTimeScreen(
+          builder: (routeContext) => PickupTimeScreen(
             currentTime: widget.currentTime,
             onSuggestionReady: (time) => suggestedTime = time,
             onNavTap: _profileNavTap,
@@ -636,7 +931,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             initialTime: draft?['time'] as String?,
             notice: sessionService.notice ?? profileController.notice,
             onDraftChanged: (time, chosen) {
-              if (owner == _userId) {
+              if (_sameUser(owner)) {
                 _savePickupDraft(
                   'start_$parkingId',
                   time,
@@ -646,10 +941,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             },
             onCheckStatus: () {
               _returnToMain();
-              openMyParking();
+              unawaited(openMyParking());
             },
             onChangeVehicle: () async {
               final chosen = await _chooseVehicle();
+
+              if (!_sameUser(owner)) return null;
+
               if (chosen != null) {
                 vehicle = chosen;
               } else if (!profileController.vehicles.any(
@@ -657,6 +955,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
               )) {
                 vehicle = null;
               }
+
               return vehicle;
             },
             openingTime: (parking['openingTime']?.length ?? 0) >= 5
@@ -666,62 +965,59 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                 ? parking['closingTime']!
                 : '23:59:00',
             onStartParking: (time, chosenVehicle) async {
-              if (owner != _userId) {
-                throw const AuthException('Sign in to continue.');
-              }
+              _requireUser(owner);
+
               await sessionService.savePickupDraft('start_$parkingId', {
                 'time': time,
                 'vehicle_id': chosenVehicle.id,
               });
 
-              final pickup = _buildPickupDateTime(time);
+              _requireUser(owner);
+              await _connection.requireConnection();
+              _requireUser(owner);
 
+              final pickup = _buildPickupDateTime(time);
               final stopwatch = Stopwatch()..start();
 
-              final session = await sessionController.startParking(
-                parkingId: parkingId,
-                pickupTime: pickup,
-                vehicleId: chosenVehicle.id,
-                parkingName: parking['name'] ?? 'Parking stay',
-                suggestedPickupTime: suggestedTime == null
-                    ? null
-                    : _buildPickupDateTime(suggestedTime!),
+              final session = await _parkingRequest(
+                () => sessionController.startParking(
+                  parkingId: parkingId,
+                  pickupTime: pickup,
+                  vehicleId: chosenVehicle.id,
+                  parkingName: parking['name'] ?? 'Parking stay',
+                  suggestedPickupTime: suggestedTime == null
+                      ? null
+                      : _buildPickupDateTime(suggestedTime!),
+                ),
               );
 
               stopwatch.stop();
 
-              final durationMs = stopwatch.elapsedMilliseconds;
-              if (!mounted || owner != _userId) return;
+              if (!_sameUser(owner)) return;
 
-              unawaited(
-                analyticsController
-                    .track(
-                      eventType: 'parking_started',
-                      screen: 'pickup_time',
-                      parkingId: parkingId,
-                      metadata: {
-                        'pickup_time': pickup.toIso8601String(),
-                        if (!sessionService.recoveredRequest)
-                          'duration_ms': durationMs,
-                        'recovered_request': sessionService.recoveredRequest,
-                        'platform': 'flutter',
-                        'session_id': session.id,
-                      },
-                    )
-                    .catchError((Object _) {}),
+              _track(
+                eventType: 'parking_started',
+                screen: 'pickup_time',
+                parkingId: parkingId,
+                metadata: {
+                  'pickup_time': pickup.toIso8601String(),
+                  if (!sessionService.recoveredRequest)
+                    'duration_ms': stopwatch.elapsedMilliseconds,
+                  'recovered_request': sessionService.recoveredRequest,
+                  'platform': 'flutter',
+                  'session_id': session.id,
+                },
               );
 
-              if (!context.mounted) return;
+              if (!routeContext.mounted) return;
 
               _returnToMain();
-              openMyParking();
+              unawaited(openMyParking());
+
               if (session.status == 'completed') {
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'The earlier parking request was confirmed, but that session has already ended.',
-                    ),
-                  ),
+                showUserMessage(
+                  context,
+                  'The earlier request was confirmed. That parking has already ended.',
                 );
               }
             },
@@ -729,32 +1025,46 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         ),
       );
     } catch (error) {
-      if (mounted && owner == _userId) _showRequestError(error);
+      if (_sameUser(owner)) {
+        _showRequestError(error, ErrorAction.startParking);
+      }
+    } finally {
+      _isOpeningPickup = false;
     }
   }
 
-  void openChangePickupTime() async {
+  Future<void> openChangePickupTime() async {
+    if (_isOpeningPickupChange || !mounted) return;
+
+    _isOpeningPickupChange = true;
     final owner = _userId;
+
     try {
       final session = await sessionController.loadActiveSession();
 
-      if (!mounted || owner != _userId) return;
+      if (!_sameUser(owner) || session == null) return;
 
-      if (session == null) {
-        return;
+      final details = await _loadSessionParking(session.parkingId);
+      if (!_sameUser(owner)) return;
+
+      final parking = details.parking;
+
+      if (parking == null) {
+        throw const UserInputException(
+          'Parking details are unavailable. Please try again later.',
+        );
       }
 
-      final parking = await _loadSessionParking(session.parkingId);
-      final draft = await sessionService.getPickupDraft('change_${session.id}');
+      final draft = await sessionService.getPickupDraft(
+        'change_${session.id}',
+      );
 
-      if (parking == null || !mounted || owner != _userId) {
-        return;
-      }
+      if (!_sameUser(owner)) return;
 
-      Navigator.push(
+      await Navigator.push<void>(
         context,
         MaterialPageRoute<void>(
-          builder: (context) => ChangePickupTimeScreen(
+          builder: (_) => ChangePickupTimeScreen(
             currentTime: widget.currentTime,
             onNavTap: _profileNavTap,
             initialTime:
@@ -762,55 +1072,62 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                 _formatTimeForPicker(session.pickupTime),
             notice:
                 sessionService.notice ??
-                (_usingSavedParking
-                    ? 'Showing saved parking hours. Reconnect and refresh to update them.'
-                    : null),
+                (details.isFromCache ? 'Using saved parking hours.' : null),
             onDraftChanged: (time) {
-              if (owner == _userId) {
+              if (_sameUser(owner)) {
                 _savePickupDraft('change_${session.id}', time);
               }
             },
             openingTime: parking.openingTime ?? '00:00:00',
             closingTime: parking.closingTime ?? '23:59:00',
             onSave: (time) async {
-              if (owner != _userId) {
-                throw const AuthException('Sign in to continue.');
-              }
-              await sessionService.savePickupDraft('change_${session.id}', {
-                'time': time,
-              });
-              final newPickupTime = _buildPickupDateTime(time);
+              _requireUser(owner);
+
+              await sessionService.savePickupDraft(
+                'change_${session.id}',
+                {'time': time},
+              );
+
+              _requireUser(owner);
+              await _connection.requireConnection();
+              _requireUser(owner);
+
+              final pickup = _buildPickupDateTime(time);
 
               try {
-                await sessionController.changePickupTime(
-                  sessionId: session.id,
-                  pickupTime: newPickupTime,
-                  parkingName: parking.name,
+                await _parkingRequest(
+                  () => sessionController.changePickupTime(
+                    sessionId: session.id,
+                    pickupTime: pickup,
+                    parkingName: parking.name,
+                  ),
                 );
               } finally {
-                if (mounted && owner == _userId) setState(() {});
+                if (_sameUser(owner)) {
+                  setState(() {});
+                }
               }
 
-              if (!mounted || owner != _userId) return;
+              if (!_sameUser(owner)) return;
 
-              unawaited(
-                analyticsController
-                    .track(
-                      eventType: 'pickup_time_changed',
-                      screen: 'change_pickup_time',
-                      parkingId: session.parkingId,
-                      metadata: {
-                        'new_pickup_time': newPickupTime.toIso8601String(),
-                      },
-                    )
-                    .catchError((Object _) {}),
+              _track(
+                eventType: 'pickup_time_changed',
+                screen: 'change_pickup_time',
+                parkingId: session.parkingId,
+                metadata: {
+                  'new_pickup_time': pickup.toIso8601String(),
+                },
               );
             },
           ),
         ),
       );
     } catch (error) {
-      if (mounted && owner == _userId) _showRequestError(error);
+      if (_sameUser(owner)) {
+        _showRequestError(error, ErrorAction.updatePickup);
+      }
+    } finally {
+      _isOpeningPickupChange = false;
     }
   }
 
@@ -819,45 +1136,56 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     required String parkingName,
   }) async {
     final owner = _userId;
-    try {
-      await sessionController.endParking(
-        sessionId: session.id,
-        parkingName: parkingName,
-      );
-    } finally {
-      if (mounted && owner == _userId) setState(() {});
-    }
-    if (!mounted || owner != _userId) return;
 
-    if (mounted &&
-        _userId == session.userId &&
-        sessionService.historySaveFailed) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Parking ended, but its summary could not be saved on this device.',
-          ),
+    _requireUser(owner);
+    await _connection.requireConnection();
+    _requireUser(owner);
+
+    try {
+      await _parkingRequest(
+        () => sessionController.endParking(
+          sessionId: session.id,
+          parkingName: parkingName,
         ),
       );
+    } finally {
+      if (_sameUser(owner)) {
+        setState(() {});
+      }
     }
 
-    unawaited(
-      analyticsController
-          .track(
-            eventType: 'parking_ended',
-            screen: 'end_parking',
-            parkingId: session.parkingId,
-          )
-          .catchError((Object _) {}),
+    if (!_sameUser(owner)) return;
+
+    if (sessionService.historySaveFailed) {
+      showUserMessage(
+        context,
+        'Parking ended, but its summary could not be saved on this device.',
+      );
+    }
+
+    _track(
+      eventType: 'parking_ended',
+      screen: 'end_parking',
+      parkingId: session.parkingId,
     );
   }
 
-  void openMyParking() async {
+  Future<void> openMyParking() async {
+    if (!mounted || isLoadingSession) return;
+
     final owner = _userId;
+    if (!_sameUser(owner)) return;
+
+    _myParkingLoad?.cancel();
+    _myParkingLoad = ScreenLoadReporter(
+      analyticsController,
+      'my_parking',
+    );
+
+    final version = ++_myParkingRequestVersion;
+
     setState(() {
-      _sessionError = null;
-      _sessionParking = null;
-      _sessionParkingId = null;
+      _sessionLoadError = null;
       isLoadingSession = true;
       currentIndex = 3;
       showingMyParking = true;
@@ -866,27 +1194,29 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     try {
       await sessionController.loadActiveSession();
     } catch (error) {
-      if (mounted && owner == _userId) {
-        _sessionError = SessionController.messageFor(error);
+      if (_sameUser(owner) && version == _myParkingRequestVersion) {
+        _sessionLoadError = error is ConnectionFailure
+            ? error.message
+            : userErrorMessage(error, action: ErrorAction.load);
       }
     } finally {
-      if (mounted && owner == _userId) {
-        setState(() {
-          isLoadingSession = false;
-        });
+      if (_sameUser(owner) && version == _myParkingRequestVersion) {
+        setState(() => isLoadingSession = false);
       }
     }
   }
 
   Widget _buildMyParking(ParkingSession session) {
-    if (_sessionParking == null || _sessionParkingId != session.parkingId) {
-      _sessionParkingId = session.parkingId;
-      _sessionParking = _loadSessionParking(session.parkingId);
-    }
-    return FutureBuilder<Parking?>(
-      future: _sessionParking,
-      builder: (context, parkingSnapshot) {
-        if (parkingSnapshot.connectionState == ConnectionState.waiting) {
+    return ManagedFutureBuilder<ParkingDetailState>(
+      requestKey: (
+        _userId,
+        session.id,
+        session.parkingId,
+        _myParkingRequestVersion,
+      ),
+      load: () => _loadSessionParking(session.parkingId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return ProfilePage(
             title: 'My parking',
             onNavTap: changePage,
@@ -894,19 +1224,29 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           );
         }
 
-        if (parkingSnapshot.hasError) {
-          return _parkingFailure(
-            SessionController.messageFor(parkingSnapshot.error!),
+        final details = snapshot.data;
+        final parking = details?.parking;
+
+        if (snapshot.hasError || parking == null) {
+          _myParkingLoad?.presented(
+            context,
+            source: 'none',
+            failed: true,
+          );
+
+          return _loadFailure(
+            'Could not load parking details. Please try again later.',
+            openMyParking,
+            title: 'My parking',
           );
         }
 
-        final parking = parkingSnapshot.data;
+        final cachedSession = sessionState.isFromCache;
+        final source = details!.isFromCache
+            ? (cachedSession ? 'sqlite' : 'mixed')
+            : (cachedSession ? 'mixed' : 'network');
 
-        if (parking == null) {
-          return const Scaffold(
-            body: Center(child: Text('Parking lot not found.')),
-          );
-        }
+        _myParkingLoad?.presented(context, source: source);
 
         return MyParkingScreen(
           currentIndex: currentIndex,
@@ -914,13 +1254,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           session: session,
           parking: parking,
           navigationController: navigationController,
-          onEndParking: () =>
-              endParking(session: session, parkingName: parking.name),
+          onEndParking: () => endParking(
+            session: session,
+            parkingName: parking.name,
+          ),
           notice:
               sessionService.notice ??
-              (_usingSavedParking
-                  ? 'Showing saved parking details. Reconnect and refresh to update them.'
-                  : null),
+              (details.isFromCache ? 'Using saved parking details.' : null),
           onRefresh: openMyParking,
           onChangePickupTime: openChangePickupTime,
         );
@@ -928,23 +1268,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     );
   }
 
-  Widget _parkingFailure(String message) => ProfilePage(
-    title: 'My parking',
-    onNavTap: changePage,
-    child: Column(
-      children: [
-        ProfileError(message),
-        const SizedBox(height: 16),
-        ProfileButton(text: 'Check parking status', onPressed: openMyParking),
-      ],
-    ),
-  );
-
   @override
   Widget build(BuildContext context) {
     switch (currentIndex) {
       case 1:
         return ParkingListScreen(
+          analytics: analyticsController,
           currentIndex: currentIndex,
           onNavTap: changePage,
           controller: parkingController,
@@ -953,8 +1282,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         );
 
       case 2:
-        return FutureBuilder<List<Parking>>(
-          future: favoriteController.loadFavorites(),
+        return ManagedFutureBuilder<FavoriteListState>(
+          analytics: analyticsController,
+          screenName: 'favorites',
+          loadSource: (data) =>
+              data?.isFromCache == true ? 'sqlite' : 'network',
+          requestKey: (_userId, _favoritesRequestVersion),
+          load: favoriteController.loadFavoriteSnapshot,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(
@@ -963,42 +1297,44 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             }
 
             if (snapshot.hasError) {
-              return Scaffold(
-                body: Center(
-                  child: Text(
-                    'Error loading favorites:\n${snapshot.error}',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
+              return _loadFailure(
+                'Could not load favorites. Check your connection and retry.',
+                _refreshFavorites,
               );
             }
 
-            final favorites = snapshot.data ?? [];
+            final saved = snapshot.data;
+            final favorites = saved?.favorites ?? [];
+
+            final storageNotice = [
+              if (saved?.isFromCache == true)
+                'Showing saved favorites. They may be incomplete or outdated.',
+              if ((saved?.pendingCount ?? 0) > 0)
+                '${saved!.pendingCount} change(s) saved on this device and waiting to sync.',
+              if (saved?.updatedAt != null)
+                'Last server update: ${saved!.updatedAt!.toLocal().toString().split('.').first}',
+            ].join('\n');
 
             if (favorites.isEmpty) {
-              return NoFavoritesScreen(onNavTap: changePage);
+              return NoFavoritesScreen(
+                onNavTap: changePage,
+                storageNotice: storageNotice.isEmpty
+                    ? null
+                    : storageNotice,
+                onRefresh: _refreshFavorites,
+              );
             }
 
             return FavoritesScreen(
               favorites: favorites,
+              pendingRemovalIds: Set.unmodifiable(_removingFavoriteIds),
+              storageNotice: storageNotice.isEmpty
+                  ? null
+                  : storageNotice,
+              onRefresh: _refreshFavorites,
               onNavTap: changePage,
               onSelectParking: openParkingDetail,
-              onRemove: (parking) async {
-                await favoriteController.removeFavorite(parking.id);
-
-                unawaited(
-                  analyticsController
-                      .track(
-                        eventType: 'favorite_removed',
-                        screen: 'favorites',
-                        parkingId: parking.id,
-                      )
-                      .catchError((Object _) {}),
-                );
-
-                if (!mounted) return;
-                setState(() {});
-              },
+              onRemove: (parking) => _removeFavorite(parking.id),
             );
           },
         );
@@ -1006,6 +1342,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       case 3:
         if (!showingMyParking) {
           return ProfileScreen(
+            analytics: analyticsController,
             controller: profileController,
             onNavTap: _profileNavTap,
             onMyParking: openMyParking,
@@ -1020,35 +1357,65 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         }
 
         if (isLoadingSession) {
-          return ProfilePage(
-            title: 'My parking',
-            onNavTap: changePage,
-            child: const Center(child: CircularProgressIndicator()),
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
           );
         }
 
-        if (_sessionError != null) return _parkingFailure(_sessionError!);
+        if (_sessionLoadError != null) {
+          _myParkingLoad?.presented(
+            context,
+            source: 'none',
+            failed: true,
+          );
+
+          return _loadFailure(
+            _sessionLoadError!,
+            openMyParking,
+            title: 'My parking',
+          );
+        }
 
         return ListenableBuilder(
           listenable: sessionState,
           builder: (context, child) {
             final session = sessionState.activeSession;
 
+            if (session == null && sessionService.pendingRequest != null) {
+              _myParkingLoad?.presented(
+                context,
+                source: 'none',
+                failed: true,
+              );
+
+              return _loadFailure(
+                sessionService.notice ??
+                    'Check the status of your previous parking request.',
+                openMyParking,
+                title: 'My parking',
+              );
+            }
+
             if (session == null) {
-              if (sessionService.pendingRequest != null) {
-                return _parkingFailure(sessionService.notice!);
-              }
+              _myParkingLoad?.presented(
+                context,
+                source: sessionState.isFromCache ? 'sqlite' : 'network',
+              );
+
               return NoActiveParkingScreen(
                 currentIndex: currentIndex,
                 onNavTap: changePage,
+                isFromCache: sessionState.isFromCache,
               );
             }
 
             return _buildMyParking(session);
           },
         );
+
       default:
         return HomeScreen(
+          analytics: analyticsController,
           currentIndex: currentIndex,
           onNavTap: changePage,
           onOpenMyParking: openMyParking,

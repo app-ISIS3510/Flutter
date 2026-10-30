@@ -8,6 +8,8 @@ import '../services/auth_service.dart';
 import '../services/profile_service.dart';
 import '../services/session_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/error_messages.dart';
+import '../widgets/user_error_notice.dart';
 import 'check_email.dart';
 import 'create_account.dart';
 import 'main_navigation.dart';
@@ -81,8 +83,7 @@ Future<void> _handleRecoveryLink() async {
 
     setState(() {
       isProcessingRecovery = false;
-      recoveryError =
-          'This password reset link is invalid or has expired.';
+      recoveryError = ErrorMessages.invalidRecoveryLink;
     });
 
     return;
@@ -115,8 +116,7 @@ Future<void> _handleRecoveryLink() async {
 
     setState(() {
       isProcessingRecovery = false;
-      recoveryError =
-          'This password reset link is invalid or has expired.';
+      recoveryError = ErrorMessages.invalidRecoveryLink;
     });
   }
 }
@@ -162,7 +162,12 @@ Future<void> _handleRecoveryLink() async {
   }
 
   Future<void> _backToSignInAfterPasswordUpdate() async {
-    await authController.signOut();
+    try {
+      await authController.signOut();
+    } catch (error) {
+      if (mounted) showUserError(context, error, action: ErrorAction.signOut);
+      return;
+    }
 
     if (!mounted) return;
 

@@ -1,10 +1,10 @@
 
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../controllers/auth_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/auth_error_message.dart';
+import '../utils/user_error_message.dart';
 
 class SignInScreen extends StatefulWidget {
   final AuthController controller;
@@ -41,47 +41,10 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   String _friendlyError(Object error) {
-    if (error is AuthException) {
-      final message = error.message.toLowerCase();
-      final code = error.code?.toLowerCase() ?? '';
-
-      if (code == 'invalid_credentials' ||
-          message.contains('invalid login credentials') ||
-          message.contains('invalid credentials')) {
-        return 'Incorrect email or password. Please try again.';
-      }
-
-      if (code == 'email_not_confirmed' ||
-          message.contains('email not confirmed')) {
-        return 'Please verify your email before signing in.';
-      }
-
-      if (code == 'over_request_rate_limit' ||
-          code == 'over_email_send_rate_limit' ||
-          message.contains('too many requests') ||
-          message.contains('rate limit')) {
-        return 'Too many attempts. Please try again later.';
-      }
-
-      if (message.contains('network') ||
-          message.contains('connection') ||
-          message.contains('failed to fetch')) {
-        return 'Connection problem. Please check your internet and try again.';
-      }
-    }
-
-    final message = error.toString().toLowerCase();
-
-    if (message.contains('socketexception') ||
-        message.contains('clientexception') ||
-        message.contains('failed host lookup') ||
-        message.contains('connection') ||
-        message.contains('network') ||
-        message.contains('xmlhttprequest')) {
-      return 'Connection problem. Please check your internet and try again.';
-    }
-
-    return 'Unable to sign in right now. Please try again.';
+    return userErrorMessage(
+      error,
+      action: ErrorAction.signIn,
+    );
   }
 
   Future<void> _signIn() async {

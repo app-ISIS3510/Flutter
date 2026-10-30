@@ -5,6 +5,8 @@ class AnalyticsController {
 
   AnalyticsController(this.service);
 
+  String? get currentUserId => service.repository.client.auth.currentUser?.id;
+
   Future<void> track({
     required String eventType,
     String? screen,

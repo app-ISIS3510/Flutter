@@ -5,15 +5,20 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import '../controllers/parking_controller.dart';
+import '../controllers/analytics_controller.dart';
+import '../utils/screen_load_reporter.dart';
 import '../models/parking_option.dart';
 import '../models/vehicle.dart';
+import '../state/nearby_parking_state.dart';
 
 class SearchScreen extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onNavTap;
   final ValueChanged<String> onSearch;
   final ParkingController parkingController;
+  final AnalyticsController? analytics;
   final Vehicle? selectedVehicle;
+  final ValueChanged<Map<String, String>>? onSelectParking;
 
   const SearchScreen({
     super.key,
@@ -22,6 +27,8 @@ class SearchScreen extends StatefulWidget {
     required this.onSearch,
     required this.parkingController,
     this.selectedVehicle,
+    this.onSelectParking,
+    this.analytics,
   });
 
   @override
@@ -31,7 +38,8 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
-  late Future<List<ParkingOption>> _optionsFuture;
+  late Future<NearbyParkingState> _optionsFuture;
+  ScreenLoadReporter? _screenLoad;
 
   @override
   void initState() {
@@ -43,8 +51,14 @@ class _SearchScreenState extends State<SearchScreen> {
     });
   }
 
-  Future<List<ParkingOption>> _loadOptions() {
-    return widget.parkingController.loadParkingOptions(
+  Future<NearbyParkingState> _loadOptions() {
+    _screenLoad?.cancel();
+    _screenLoad = ScreenLoadReporter(
+      widget.analytics,
+      'search',
+      trigger: _screenLoad == null ? 'navigation' : 'refresh',
+    );
+    return widget.parkingController.loadNearbyParking(
       vehicleType: widget.selectedVehicle?.type,
     );
   }
@@ -62,15 +76,18 @@ class _SearchScreenState extends State<SearchScreen> {
     if (error is TimeoutException) {
       return 'Could not get your location. Check your GPS and reopen search.';
     }
-    final message = error.toString();
-    if (message.startsWith('Exception: Location ')) {
-      return message.replaceFirst('Exception: ', '');
-    }
-    return 'Could not load nearby parking lots. Check your location settings and connection.';
+    return switch (error.toString()) {
+      'Exception: Location services are disabled.' =>
+        'Turn on your device location to find nearby parking lots.',
+      'Exception: Location permission was denied.' ||
+      'Exception: Location permission was permanently denied.' => 'Allow ParkU to use your location in your device settings to find nearby parking lots.',
+      _ => 'Could not load nearby parking lots. Check your location settings and connection.',
+    };
   }
 
   @override
   void dispose() {
+    _screenLoad?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
@@ -95,6 +112,52 @@ class _SearchScreenState extends State<SearchScreen> {
 
     FocusScope.of(context).unfocus();
     widget.onSearch(parkingName);
+  }
+
+  void _openNearbyParking(ParkingOption option) {
+    final onSelect = widget.onSelectParking;
+    if (onSelect == null) {
+      _selectSuggestion(option.parking.name);
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    final parking = option.parking;
+    onSelect({
+      'id': parking.id,
+      'name': parking.name,
+      'address': parking.address,
+      'latitude': parking.latitude?.toString() ?? '',
+      'longitude': parking.longitude?.toString() ?? '',
+      'carSpaces': parking.availableCarSpaces.toString(),
+      'motorcycleSpaces': parking.availableMotorcycleSpaces.toString(),
+      'pricePerMinute': parking.pricePerMinute.toString(),
+      'openingTime': parking.openingTime ?? '',
+      'closingTime': parking.closingTime ?? '',
+    });
+  }
+
+  void _retryNearbyParking() {
+    setState(() => _optionsFuture = _loadOptions());
+  }
+
+  Widget _nearbyMessage(String message) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(message, style: const TextStyle(color: AppColors.greyText)),
+        TextButton(
+          onPressed: _retryNearbyParking,
+          child: const Text('Retry nearby parking'),
+        ),
+      ],
+    );
+  }
+
+  String _distanceLabel(double meters) {
+    final distance = meters < 1000
+        ? '${meters.round()} m'
+        : '${(meters / 1000).toStringAsFixed(1)} km';
+    return '$distance away (straight-line)';
   }
 
   @override
@@ -198,7 +261,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    FutureBuilder<List<ParkingOption>>(
+                    FutureBuilder<NearbyParkingState>(
                       future: _optionsFuture,
                       builder: (context, snapshot) {
                         if (snapshot.connectionState ==
@@ -212,68 +275,126 @@ class _SearchScreenState extends State<SearchScreen> {
                         }
 
                         if (snapshot.hasError) {
-                          return Text(
+                          _screenLoad?.presented(
+                            context,
+                            source: 'none',
+                            failed: true,
+                          );
+                          return _nearbyMessage(
                             _locationMessage(snapshot.error),
-                            style: const TextStyle(color: AppColors.greyText),
                           );
                         }
 
-                        final suggestedParkingLots = snapshot.data ?? [];
+                        final state = snapshot.data;
+                        _screenLoad?.presented(
+                          context,
+                          source: state == null
+                              ? 'none'
+                              : state.isFromCache
+                              ? 'sqlite'
+                              : 'network',
+                          failed: state == null || state.errorMessage != null,
+                        );
+                        if (state == null || state.errorMessage != null) {
+                          return _nearbyMessage(
+                            state?.errorMessage ??
+                                'Could not load nearby parking lots.',
+                          );
+                        }
+                        final suggestedParkingLots = state.options;
 
                         if (suggestedParkingLots.isEmpty) {
-                          return const Text(
-                            'No nearby parking lots are available to display.',
-                            style: TextStyle(color: AppColors.greyText),
+                          return _nearbyMessage(
+                            state.isFromCache
+                                ? 'No saved parking lots with valid coordinates '
+                                      'are available. Connect to the Internet and retry.'
+                                : 'No nearby parking lots are available to display.',
                           );
                         }
 
                         return Column(
-                          children: suggestedParkingLots.take(4).map((option) {
-                            final parking = option.parking;
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: InkWell(
-                                onTap: () {
-                                  _selectSuggestion(parking.name);
-                                },
-                                borderRadius: BorderRadius.circular(14),
-                                child: Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 14,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (state.isFromCache) ...[
+                              const Text(
+                                'Showing the nearest saved parking lots. '
+                                'Availability and prices may be outdated.',
+                                style: TextStyle(color: AppColors.greyText),
+                              ),
+                              if (state.updatedAt != null)
+                                Text(
+                                  'Oldest saved update: '
+                                  '${state.updatedAt!.toLocal().toString().split('.').first}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.greyText,
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.white,
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      Text(
-                                        parking.name,
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.primary,
+                                ),
+                            ],
+                            TextButton(
+                              onPressed: _retryNearbyParking,
+                              child: const Text('Refresh nearby parking'),
+                            ),
+                            ...suggestedParkingLots.take(4).map((option) {
+                              final parking = option.parking;
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: InkWell(
+                                  onTap: () {
+                                    _openNearbyParking(option);
+                                  },
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.white,
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        Text(
+                                          parking.name,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 17,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.primary,
+                                          ),
                                         ),
-                                      ),
-                                      if (option.availableSpaces != null) ...[
                                         const SizedBox(height: 6),
                                         Text(
-                                          '${option.availableSpaces} estimated spaces · ${(option.availabilityRatio! * 100).round()}% of capacity',
+                                          _distanceLabel(option.distanceMeters),
                                           textAlign: TextAlign.center,
                                           style: const TextStyle(
                                             fontSize: 12,
                                             color: AppColors.greyText,
                                           ),
                                         ),
+                                        if (option.availableSpaces != null) ...[
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            option.isFromCache
+                                                ? '${option.availableSpaces} saved estimated spaces · '
+                                                      '${(option.availabilityRatio! * 100).round()}% of capacity'
+                                                : '${option.availableSpaces} estimated spaces · '
+                                                      '${(option.availabilityRatio! * 100).round()}% of capacity',
+                                            textAlign: TextAlign.center,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.greyText,
+                                            ),
+                                          ),
+                                        ],
                                       ],
-                                    ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                            );
-                          }).toList(),
+                              );
+                            }),
+                          ],
                         );
                       },
                     ),

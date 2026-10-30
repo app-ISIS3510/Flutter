@@ -341,6 +341,8 @@ class SessionService {
     return _confirm(session, request, owner);
   }
 
+  bool get lastReadFromCache => repository.lastReadFromCache;
+
   Future<ParkingSession> startParking({
     required String parkingId,
     required DateTime pickupTime,

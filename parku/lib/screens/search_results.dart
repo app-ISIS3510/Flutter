@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../controllers/parking_controller.dart';
+import '../controllers/analytics_controller.dart';
+import '../utils/screen_load_reporter.dart';
 import '../models/parking.dart';
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
@@ -12,6 +16,7 @@ class SearchResultsScreen extends StatefulWidget {
   final ValueChanged<int> onNavTap;
   final ValueChanged<Map<String, String>>? onSelectParking;
   final ParkingController parkingController;
+  final AnalyticsController? analytics;
 
   const SearchResultsScreen({
     super.key,
@@ -20,31 +25,33 @@ class SearchResultsScreen extends StatefulWidget {
     required this.onNavTap,
     required this.parkingController,
     this.onSelectParking,
+    this.analytics,
   });
 
   @override
-  State<SearchResultsScreen> createState() =>
-      _SearchResultsScreenState();
+  State<SearchResultsScreen> createState() => _SearchResultsScreenState();
 }
 
-class _SearchResultsScreenState
-    extends State<SearchResultsScreen> {
+class _SearchResultsScreenState extends State<SearchResultsScreen> {
   late TextEditingController _searchController;
 
   final FocusNode _searchFocusNode = FocusNode();
 
   late Future<List<Parking>> _resultsFuture;
+  Timer? _searchDebounce;
+  bool _isDebouncing = false;
+  late ScreenLoadReporter _screenLoad;
 
   @override
   void initState() {
     super.initState();
+    _screenLoad = ScreenLoadReporter(widget.analytics, 'search_results');
 
-    _searchController = TextEditingController(
-      text: widget.initialQuery,
+    _searchController = TextEditingController(text: widget.initialQuery);
+
+    _resultsFuture = widget.parkingController.searchParkingLots(
+      widget.initialQuery,
     );
-
-    _resultsFuture = widget.parkingController
-        .searchParkingLots(widget.initialQuery);
   }
 
   Map<String, String> _parkingToMap(Parking parking) {
@@ -64,8 +71,7 @@ class _SearchResultsScreenState
   }
 
   String _parkingType(Parking parking) {
-    if (parking.carSpaces > 0 &&
-        parking.motorcycleSpaces > 0) {
+    if (parking.carSpaces > 0 && parking.motorcycleSpaces > 0) {
       return 'Cars and motorcycles';
     }
 
@@ -81,21 +87,38 @@ class _SearchResultsScreenState
   }
 
   void _search(String query) {
+    _searchDebounce?.cancel();
+    if (!mounted) return;
     final trimmedQuery = query.trim();
 
     setState(() {
+      _screenLoad.cancel();
+      _screenLoad = ScreenLoadReporter(
+        widget.analytics,
+        'search_results',
+        trigger: 'search',
+      );
+      _isDebouncing = false;
       if (trimmedQuery.isEmpty) {
-        _resultsFuture =
-            Future<List<Parking>>.value([]);
+        _resultsFuture = Future<List<Parking>>.value([]);
       } else {
-        _resultsFuture = widget.parkingController
-            .searchParkingLots(trimmedQuery);
+        _resultsFuture = widget.parkingController.searchParkingLots(
+          trimmedQuery,
+        );
       }
     });
   }
 
   void _onSearchChanged(String value) {
-    _search(value);
+    _searchDebounce?.cancel();
+    if (value.trim().isEmpty) {
+      _search(value);
+      return;
+    }
+    setState(() => _isDebouncing = true);
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) _search(value);
+    });
   }
 
   void _clearSearch() {
@@ -112,16 +135,15 @@ class _SearchResultsScreenState
   }
 
   void _showAllParkingLots() {
-    Navigator.popUntil(
-      context,
-      (route) => route.isFirst,
-    );
+    Navigator.popUntil(context, (route) => route.isFirst);
 
     widget.onNavTap(1);
   }
 
   @override
   void dispose() {
+    _screenLoad.cancel();
+    _searchDebounce?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
 
@@ -137,28 +159,29 @@ class _SearchResultsScreenState
           children: [
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(
-                  30,
-                  20,
-                  30,
-                  24,
-                ),
+                padding: const EdgeInsets.fromLTRB(30, 20, 30, 24),
                 child: FutureBuilder<List<Parking>>(
                   future: _resultsFuture,
                   builder: (context, snapshot) {
                     final isLoading =
-                        snapshot.connectionState ==
-                            ConnectionState.waiting;
+                        _isDebouncing ||
+                        snapshot.connectionState == ConnectionState.waiting;
 
-                    final parkingLots =
-                        snapshot.data ?? [];
+                    final parkingLots = snapshot.data ?? [];
 
-                    final hasResults =
-                        parkingLots.isNotEmpty;
+                    final hasResults = parkingLots.isNotEmpty;
+                    if (!isLoading &&
+                        snapshot.connectionState == ConnectionState.done &&
+                        _searchController.text.trim().isNotEmpty) {
+                      _screenLoad.presented(
+                        context,
+                        source: snapshot.hasError ? 'none' : 'network',
+                        failed: snapshot.hasError,
+                      );
+                    }
 
                     return Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
@@ -166,17 +189,13 @@ class _SearchResultsScreenState
                               onTap: () {
                                 Navigator.pop(context);
                               },
-                              borderRadius:
-                                  BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(14),
                               child: Container(
                                 width: 48,
                                 height: 48,
                                 decoration: BoxDecoration(
                                   color: AppColors.white,
-                                  borderRadius:
-                                      BorderRadius.circular(
-                                    14,
-                                  ),
+                                  borderRadius: BorderRadius.circular(14),
                                 ),
                                 child: const Icon(
                                   Icons.arrow_back,
@@ -189,15 +208,17 @@ class _SearchResultsScreenState
 
                             Expanded(
                               child: Text(
-                                hasResults
+                                isLoading
+                                    ? 'Searching...'
+                                    : snapshot.hasError
+                                    ? 'Search unavailable'
+                                    : hasResults
                                     ? 'Search results'
                                     : 'No search results',
                                 style: const TextStyle(
                                   fontSize: 28,
-                                  fontWeight:
-                                      FontWeight.w700,
-                                  color:
-                                      AppColors.darkText,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.darkText,
                                 ),
                               ),
                             ),
@@ -210,8 +231,7 @@ class _SearchResultsScreenState
                           'Search by name',
                           style: TextStyle(
                             fontSize: 15,
-                            fontWeight:
-                                FontWeight.w600,
+                            fontWeight: FontWeight.w600,
                             color: AppColors.darkText,
                           ),
                         ),
@@ -221,40 +241,26 @@ class _SearchResultsScreenState
                         TextField(
                           controller: _searchController,
                           focusNode: _searchFocusNode,
-                          textInputAction:
-                              TextInputAction.search,
+                          textInputAction: TextInputAction.search,
                           onChanged: _onSearchChanged,
                           onSubmitted: _search,
                           decoration: InputDecoration(
                             filled: true,
                             fillColor: AppColors.white,
-                            contentPadding:
-                                const EdgeInsets.symmetric(
+                            contentPadding: const EdgeInsets.symmetric(
                               horizontal: 18,
                               vertical: 18,
                             ),
-                            enabledBorder:
-                                OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(
-                                14,
-                              ),
-                              borderSide:
-                                  const BorderSide(
-                                color:
-                                    Color(0xFFE0DCEA),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(
+                                color: Color(0xFFE0DCEA),
                               ),
                             ),
-                            focusedBorder:
-                                OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.circular(
-                                14,
-                              ),
-                              borderSide:
-                                  const BorderSide(
-                                color:
-                                    AppColors.primary,
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: const BorderSide(
+                                color: AppColors.primary,
                                 width: 1.5,
                               ),
                             ),
@@ -265,26 +271,25 @@ class _SearchResultsScreenState
 
                         if (isLoading)
                           const Padding(
-                            padding:
-                                EdgeInsets.symmetric(
-                              vertical: 40,
-                            ),
-                            child: Center(
-                              child:
-                                  CircularProgressIndicator(),
-                            ),
+                            padding: EdgeInsets.symmetric(vertical: 40),
+                            child: Center(child: CircularProgressIndicator()),
                           )
                         else if (snapshot.hasError)
                           Padding(
-                            padding:
-                                const EdgeInsets.symmetric(
-                              vertical: 30,
-                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 30),
                             child: Center(
-                              child: Text(
-                                'Error searching parking lots:\n${snapshot.error}',
-                                textAlign:
-                                    TextAlign                                    .center,
+                              child: Column(
+                                children: [
+                                  const Text(
+                                    'Could not search parking lots. Please try again.',
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  TextButton(
+                                    onPressed: () =>
+                                        _search(_searchController.text),
+                                    child: const Text('Retry'),
+                                  ),
+                                ],
                               ),
                             ),
                           )
@@ -326,45 +331,35 @@ class _SearchResultsScreenState
 
                           const SizedBox(height: 12),
 
-                          ...parkingLots.map(
-                            (parking) {
-                              return Padding(
-                                padding: const EdgeInsets.only(
-                                  bottom: 12,
-                                ),
-                                child: ParkingCard(
-                                  name: parking.name,
-                                  address: parking.address,
-                                  type: _parkingType(parking),
-                                  onTap: widget.onSelectParking == null
-                                      ? null
-                                      : () {
-                                          widget.onSelectParking!(
-                                            _parkingToMap(parking),
-                                          );
-                                        },
-                                ),
-                              );
-                            },
-                          ),
+                          ...parkingLots.map((parking) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: ParkingCard(
+                                name: parking.name,
+                                address: parking.address,
+                                type: _parkingType(parking),
+                                onTap: widget.onSelectParking == null
+                                    ? null
+                                    : () {
+                                        widget.onSelectParking!(
+                                          _parkingToMap(parking),
+                                        );
+                                      },
+                              ),
+                            );
+                          }),
                         ] else ...[
                           const SizedBox(height: 4),
 
                           Container(
                             width: double.infinity,
-                            padding: const EdgeInsets.fromLTRB(
-                              20,
-                              22,
-                              20,
-                              20,
-                            ),
+                            padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
                             decoration: BoxDecoration(
                               color: AppColors.lightPurple,
                               borderRadius: BorderRadius.circular(22),
                             ),
                             child: const Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   'No parking lots found',
@@ -447,10 +442,7 @@ class _SearchResultsScreenState
               ),
             ),
 
-            NavBar(
-              currentIndex: widget.currentIndex,
-              onTap: widget.onNavTap,
-            ),
+            NavBar(currentIndex: widget.currentIndex, onTap: widget.onNavTap),
           ],
         ),
       ),

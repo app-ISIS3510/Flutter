@@ -4,48 +4,54 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/parking_session.dart';
 import '../services/session_service.dart';
-import '../state/session_state.dart';
 import '../services/connection_failure.dart';
+import '../state/session_state.dart';
+import '../utils/user_error_message.dart';
 
 class SessionController {
   static String messageFor(Object error) {
-    if (error is ConnectionFailure) return error.message;
+    if (error is ConnectionFailure) {
+      return error.message;
+    }
+
     if (isConnectionError(error)) {
-      return 'Could not reach the server. Your selection has been kept. Reconnect and try again.';
+      return 'Could not confirm the request. Reconnect and check '
+          'My parking before trying again.';
     }
-    if (error is AuthException) return 'Sign in to continue.';
-    if (error is FormatException) return error.message;
-    if (error is PostgrestException) {
-      if (error.message.contains('NO_AVAILABLE_SPACES')) {
-        return 'This parking lot has no available spaces.';
-      }
-      if (error.message.contains('ACTIVE_SESSION_EXISTS')) {
-        return 'You already have an active parking session. Open My parking.';
-      }
-      if (error.message.contains('VEHICLE_NOT_FOUND')) {
-        return 'This vehicle is no longer available. Choose another vehicle.';
-      }
-      if (error.message.contains('INVALID_PICKUP_TIME')) {
-        return 'Choose a pickup time later than the current time.';
-      }
-    }
-    return 'Could not complete this request. Check your connection and try again.';
+
+    return userErrorMessage(
+      error,
+      action: ErrorAction.startParking,
+    );
   }
 
   final SessionService service;
   final SessionState sessionState;
+
   int _version = 0;
   int? _busyVersion;
   Future<ParkingSession?>? _loading;
   int? _loadingVersion;
   String? _loadingUser;
+
   bool get busy => _busyVersion != null;
 
   SessionController(this.service, this.sessionState);
 
+  void _checkUser(String? userId) {
+    if (service.currentUserId != userId) {
+      throw const AuthException(
+        'The signed-in account changed.',
+      );
+    }
+  }
+
   void clear() {
     _version++;
     _busyVersion = null;
+    _loading = null;
+    _loadingVersion = null;
+    _loadingUser = null;
     service.clear();
     sessionState.clearSession();
   }
@@ -53,6 +59,9 @@ class SessionController {
   void dispose() {
     _version++;
     _busyVersion = null;
+    _loading = null;
+    _loadingVersion = null;
+    _loadingUser = null;
   }
 
   Future<ParkingSession> _change(
@@ -63,16 +72,21 @@ class SessionController {
         'A parking request is already being checked. Please wait.',
       );
     }
+
     final version = ++_version;
     final userId = service.currentUserId;
     _busyVersion = version;
+
     try {
       final session = await action();
-      if (version == _version && userId == service.currentUserId) {
+      _checkUser(userId);
+
+      if (version == _version) {
         sessionState.setActiveSession(
           session.status == 'active' ? session : null,
         );
       }
+
       return session;
     } finally {
       if (_busyVersion == version) {
@@ -88,7 +102,7 @@ class SessionController {
     required String vehicleId,
     String parkingName = 'Parking stay',
     DateTime? suggestedPickupTime,
-  }) async {
+  }) {
     return _change(
       () => service.startParking(
         parkingId: parkingId,
@@ -103,17 +117,22 @@ class SessionController {
   Future<ParkingSession?> loadActiveSession() {
     final version = _version;
     final userId = service.currentUserId;
+
     if (_loading != null &&
         _loadingVersion == version &&
         _loadingUser == userId) {
       return _loading!;
     }
+
     final request = _loadActiveSession(version, userId);
     _loading = request;
     _loadingVersion = version;
     _loadingUser = userId;
+
     void finished() {
-      if (identical(_loading, request)) _loading = null;
+      if (identical(_loading, request)) {
+        _loading = null;
+      }
     }
 
     unawaited(
@@ -122,6 +141,7 @@ class SessionController {
         onError: (Object _, StackTrace _) => finished(),
       ),
     );
+
     return request;
   }
 
@@ -130,11 +150,16 @@ class SessionController {
     String? userId,
   ) async {
     final session = await service.getActiveSession();
-    if (version == _version &&
-        userId == service.currentUserId &&
-        _busyVersion == null) {
-      sessionState.setActiveSession(session);
+    _checkUser(userId);
+
+    if (version == _version && _busyVersion == null) {
+      sessionState.setActiveSession(
+        session,
+        isFromCache:
+            service.lastReadFromCache || service.usingSavedSession,
+      );
     }
+
     return session;
   }
 
@@ -142,7 +167,7 @@ class SessionController {
     required String sessionId,
     required DateTime pickupTime,
     String parkingName = 'Parking stay',
-  }) async {
+  }) {
     return _change(
       () => service.changePickupTime(
         sessionId: sessionId,
@@ -155,9 +180,12 @@ class SessionController {
   Future<ParkingSession> endParking({
     required String sessionId,
     String parkingName = 'Parking stay',
-  }) async {
+  }) {
     return _change(
-      () => service.endParking(sessionId: sessionId, parkingName: parkingName),
+      () => service.endParking(
+        sessionId: sessionId,
+        parkingName: parkingName,
+      ),
     );
   }
 

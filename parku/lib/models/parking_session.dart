@@ -9,6 +9,8 @@ class ParkingSession {
   final String vehicleType;
   final String? vehicleId;
   final String? vehiclePlate;
+  final bool isFromCache;
+  final DateTime? confirmedAt;
 
   ParkingSession({
     required this.id,
@@ -21,24 +23,9 @@ class ParkingSession {
     this.vehicleType = 'car',
     this.vehicleId,
     this.vehiclePlate,
+    this.isFromCache = false,
+    this.confirmedAt,
   });
-
-  factory ParkingSession.fromMap(Map<String, dynamic> map) {
-    return ParkingSession(
-      id: map['id'] as String,
-      userId: map['user_id'] as String?,
-      parkingId: map['parking_id'] as String,
-      pickupTime: DateTime.parse(map['pickup_time'] as String),
-      startedAt: DateTime.parse(map['started_at'] as String),
-      endedAt: map['ended_at'] != null
-          ? DateTime.parse(map['ended_at'] as String)
-          : null,
-      status: map['status'] as String,
-      vehicleType: map['vehicle_type'] as String? ?? 'car',
-      vehicleId: map['vehicle_id'] as String?,
-      vehiclePlate: map['vehicle_plate'] as String?,
-    );
-  }
 
   Map<String, dynamic> toMap() => {
     'id': id,
@@ -52,4 +39,28 @@ class ParkingSession {
     'vehicle_id': vehicleId,
     'vehicle_plate': vehiclePlate,
   };
+
+  factory ParkingSession.fromMap(
+    Map<String, dynamic> map, {
+    bool isFromCache = false,
+    DateTime? confirmedAt,
+  }) {
+    return ParkingSession(
+      id: map['id'] as String,
+      userId: map['user_id'] as String?,
+      parkingId: map['parking_id'] as String,
+      pickupTime: DateTime.parse(map['pickup_time'] as String),
+      startedAt: DateTime.parse(map['started_at'] as String),
+      endedAt: map['ended_at'] != null
+          ? DateTime.parse(map['ended_at'] as String)
+          : null,
+      status: map['status'] as String,
+      vehicleType: map['vehicle_type'] as String? ?? 'car',
+      vehicleId: map['vehicle_id'] as String?,
+      vehiclePlate: map['vehicle_plate'] as String?,
+      isFromCache: isFromCache,
+      confirmedAt: confirmedAt,
+    );
+  }
+
 }

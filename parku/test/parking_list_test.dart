@@ -13,8 +13,33 @@ import 'package:parku/services/distance_manager.dart';
 import 'package:parku/services/parking_service.dart';
 import 'package:parku/widgets/parking_card.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:parku/services/connectivity_service.dart';
+import 'package:parku/models/parking.dart';
+import 'package:parku/data/local/parking_local_data_source.dart';
 
 import 'support/parking_fakes.dart';
+
+class TestConnectivityService extends ConnectivityService {
+  @override
+  Future<bool> hasNetworkConnection() async => true;
+
+  @override
+  Future<bool?> connectionStatus() async => true;
+
+  @override
+  Stream<bool> get onNetworkChanged => const Stream<bool>.empty();
+}
+
+class TestParkingLocalDataSource extends ParkingLocalDataSource {
+  @override
+  Future<CachedParkingList?> readParkingLots() async => null;
+
+  @override
+  Future<CachedParkingList?> readParkingForNearby() async => null;
+
+  @override
+  Future<void> saveParkingLots(List<Parking> parkingLots) async {}
+}
 
 void main() {
   late GeolocatorPlatform original;
@@ -46,6 +71,7 @@ void main() {
           return http.Response(
             '[]',
             200,
+            request: request,
             headers: {'content-type': 'application/json'},
           );
         }
@@ -61,7 +87,14 @@ void main() {
       }),
     );
     controller = ParkingController(
-      ParkingService(ParkingRepository(client), DistanceManager()),
+      ParkingService(
+        ParkingRepository(
+          client,
+          localDataSource: TestParkingLocalDataSource(),
+        ),
+        DistanceManager(),
+        connectivityService: TestConnectivityService(),
+      ),
     );
   });
 

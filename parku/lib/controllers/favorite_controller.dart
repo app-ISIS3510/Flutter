@@ -1,5 +1,6 @@
 import '../models/parking.dart';
 import '../services/favorite_service.dart';
+import '../state/favorite_list_state.dart';
 
 class FavoriteController {
   final FavoriteService service;
@@ -10,11 +11,14 @@ class FavoriteController {
     return service.getFavorites();
   }
 
+  Future<FavoriteListState> loadFavoriteSnapshot() =>
+      service.getFavoriteSnapshot();
+
   Future<bool> isFavorite(String parkingId) {
     return service.isFavorite(parkingId);
   }
 
-  Future<void> toggleFavorite(String parkingId) {
+  Future<bool> toggleFavorite(String parkingId) {
     return service.toggleFavorite(parkingId);
   }
 

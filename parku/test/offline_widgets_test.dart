@@ -158,7 +158,10 @@ void main() {
           .value,
       '16:30',
     );
-    expect(find.textContaining('Could not reach the server'), findsOneWidget);
+    expect(
+      find.text('We could not update your pickup time. Please try again.'),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 

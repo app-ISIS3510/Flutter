@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../controllers/profile_controller.dart';
+import '../../controllers/analytics_controller.dart';
+import '../../utils/screen_load_reporter.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/design_icon.dart';
 import 'edit_profile_screen.dart';
@@ -14,6 +16,7 @@ class ProfileScreen extends StatefulWidget {
   final VoidCallback onSignedOut;
   final VoidCallback onAnalyticsDashboard;
   final VoidCallback? onParkingHistory;
+  final AnalyticsController? analytics;
   const ProfileScreen({
     super.key,
     required this.controller,
@@ -22,15 +25,18 @@ class ProfileScreen extends StatefulWidget {
     required this.onAnalyticsDashboard,
     required this.onSignedOut,
     this.onParkingHistory,
+    this.analytics,
   });
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  ScreenLoadReporter? _screenLoad;
   @override
   void initState() {
     super.initState();
+    _screenLoad = ScreenLoadReporter(widget.analytics, 'profile');
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await widget.controller.load();
@@ -38,7 +44,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (!mounted) return;
 
       setState(() {});
+      _screenLoad?.presented(
+        context,
+        source: widget.controller.usingSavedData
+            ? 'sqlite'
+            : widget.controller.error == null
+            ? 'network'
+            : 'none',
+        failed: widget.controller.error != null,
+      );
     });
+  }
+
+  @override
+  void dispose() {
+    _screenLoad?.cancel();
+    super.dispose();
   }
 
   void _open(Widget screen) {

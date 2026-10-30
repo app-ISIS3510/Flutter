@@ -9,6 +9,8 @@ import '../widgets/navigation_bar.dart';
 import 'end_parking.dart';
 import '../controllers/navigation_controller.dart';
 import 'profile/profile_widgets.dart';
+import '../models/navigation_provider.dart';
+import '../widgets/external_navigation.dart';
 
 class MyParkingScreen extends StatefulWidget {
   final int currentIndex;
@@ -41,6 +43,7 @@ class MyParkingScreen extends StatefulWidget {
 
 class _MyParkingScreenState extends State<MyParkingScreen> {
   Timer? _timer;
+  bool _isOpeningNavigation = false;
 
   Duration remaining = Duration.zero;
 
@@ -59,52 +62,26 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
     });
   }
 
-  Future<void> _openWaze() async {
-    final latitude = widget.parking.latitude;
-    final longitude = widget.parking.longitude;
-
-    if (latitude == null || longitude == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Parking location is not available.')),
-      );
-      return;
-    }
-
-    try {
-      await widget.navigationController.openWaze(
-        latitude: latitude,
-        longitude: longitude,
-      );
-    } catch (error) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Could not open Waze: $error')));
-    }
+  Future<void> _openWaze() {
+    return _openNavigation(NavigationProvider.waze);
   }
 
-  Future<void> _openGoogleMaps() async {
-    final latitude = widget.parking.latitude;
-    final longitude = widget.parking.longitude;
+  Future<void> _openGoogleMaps() {
+    return _openNavigation(NavigationProvider.googleMaps);
+  }
 
-    if (latitude == null || longitude == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Parking location is not available.')),
-      );
-      return;
-    }
-
+  Future<void> _openNavigation(NavigationProvider provider) async {
+    if (_isOpeningNavigation) return;
+    setState(() => _isOpeningNavigation = true);
     try {
-      await widget.navigationController.openGoogleMaps(
-        latitude: latitude,
-        longitude: longitude,
+      await openExternalNavigation(
+        context: context,
+        controller: widget.navigationController,
+        provider: provider,
+        parking: widget.parking,
       );
-    } catch (error) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open Google Maps: $error')),
-      );
+    } finally {
+      if (mounted) setState(() => _isOpeningNavigation = false);
     }
   }
 
@@ -195,6 +172,19 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                     ],
 
                     const SizedBox(height: 30),
+
+                    if (widget.session.isFromCache) ...[
+                      const Text(
+                        'Saved confirmed session. Its current server status '
+                        'could not be checked. Session changes require a connection.',
+                        style: TextStyle(color: AppColors.greyText),
+                      ),
+                      if (widget.session.confirmedAt != null)
+                        Text(
+                          'Last confirmed: ${widget.session.confirmedAt!.toLocal().toString().split('.').first}',
+                        ),
+                      const SizedBox(height: 12),
+                    ],
 
                     const Center(
                       child: Text(
@@ -355,7 +345,9 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                               Expanded(
                                 child: _SecondaryButton(
                                   text: 'Google Maps',
-                                  onPressed: _openGoogleMaps,
+                                  onPressed: _isOpeningNavigation
+                                      ? null
+                                      : _openGoogleMaps,
                                 ),
                               ),
 
@@ -364,10 +356,20 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                               Expanded(
                                 child: _SecondaryButton(
                                   text: 'Waze',
-                                  onPressed: _openWaze,
+                                  onPressed: _isOpeningNavigation
+                                      ? null
+                                      : _openWaze,
                                 ),
                               ),
                             ],
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Navigation apps may need Internet for maps and routes.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.greyText,
+                            ),
                           ),
                         ],
                       ),
@@ -450,7 +452,7 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
 
 class _SecondaryButton extends StatelessWidget {
   final String text;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   const _SecondaryButton({required this.text, required this.onPressed});
 

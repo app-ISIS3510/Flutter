@@ -89,7 +89,15 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Profile').last);
+      tester
+          .state<ScaffoldMessengerState>(
+            find.byType(ScaffoldMessenger).first,
+          )
+          .clearSnackBars();
+
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Profile').hitTestable().last);
       await tester.pumpAndSettle();
       expect(
         find.textContaining('A previous change is not confirmed'),

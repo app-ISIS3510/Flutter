@@ -1,23 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../controllers/parking_controller.dart';
+import '../controllers/analytics_controller.dart';
+import '../controllers/session_controller.dart';
 import '../models/parking.dart';
+import '../models/parking_session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
-import '../controllers/session_controller.dart';
-import '../models/parking_session.dart';
+import '../widgets/parking_map_panel.dart';
 
 class HomeScreen extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onNavTap;
   final VoidCallback onOpenMyParking;
-
   final ValueChanged<Map<String, String>> onSelectParking;
-
   final ParkingController parkingController;
   final SessionController sessionController;
-
+  final AnalyticsController? analytics;
 
   const HomeScreen({
     super.key,
@@ -27,55 +26,8 @@ class HomeScreen extends StatelessWidget {
     required this.onSelectParking,
     required this.parkingController,
     required this.sessionController,
-
+    this.analytics,
   });
-
-  Map<String, String> _parkingToMap(Parking parking) {
-    return {
-      'id': parking.id,
-      'name': parking.name,
-      'address': parking.address,
-      'latitude': parking.latitude?.toString() ?? '',
-      'longitude': parking.longitude?.toString() ?? '',
-      'carSpaces': parking.availableCarSpaces.toString(),
-      'motorcycleSpaces': parking.availableMotorcycleSpaces.toString(),
-      'pricePerMinute': parking.pricePerMinute.toString(),
-      'openingTime': parking.openingTime ?? '',
-      'closingTime': parking.closingTime ?? '',
-      'imageUrl': parking.imageUrl ?? '',
-    };
-  }
-
-  Set<Marker> _buildMarkers(List<Parking> parkingLots) {
-    return parkingLots
-        .where(
-          (parking) =>
-              parking.latitude != null &&
-              parking.longitude != null,
-        )
-        .map(
-          (parking) => Marker(
-            markerId: MarkerId(parking.id),
-
-            position: LatLng(
-              parking.latitude!,
-              parking.longitude!,
-            ),
-
-            infoWindow: InfoWindow(
-              title: parking.name,
-              snippet: parking.address,
-            ),
-
-            onTap: () {
-              onSelectParking(
-                _parkingToMap(parking),
-              );
-            },
-          ),
-        )
-        .toSet();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,342 +36,194 @@ class HomeScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // HEADER
-            const Padding(
-              padding: EdgeInsets.fromLTRB(
-                32,
-                22,
-                32,
-                22,
+            Padding(
+              padding: EdgeInsets.fromLTRB(32, 22, 32, 12),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'ParkU',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.darkText,
+                      ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => onNavTap(1),
+                    icon: const Icon(Icons.list_alt_rounded),
+                    label: const Text('Parking lots'),
+                  ),
+                ],
               ),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'ParkU',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.darkText,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(32, 0, 32, 12),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onOpenMyParking,
+                  icon: const Icon(Icons.local_parking_rounded),
+                  label: const Text('My parking'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
               ),
             ),
-
-            // MAP
             Expanded(
-              child: FutureBuilder<List<Parking>>(
-                future: parkingController.loadParkingLots(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState ==
-                      ConnectionState.waiting) {
-                    return const Center(
-                      child: CircularProgressIndicator(),
-                    );
-                  }
-
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 32,
-                        ),
-                        child: Text(
-                          'Error loading map:\n${snapshot.error}',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    );
-                  }
-
-                  final parkingLots =
-                      snapshot.data ?? [];
-
-                  final markers =
-                      _buildMarkers(parkingLots);
-
-                  return Stack(
-                    children: [
-                      Positioned.fill(
-                        child: GoogleMap(
-                          initialCameraPosition:
-                              const CameraPosition(
-                            target: LatLng(
-                              4.6030,
-                              -74.0660,
-                            ),
-                            zoom: 15.5,
-                          ),
-                          markers: markers,
-                          myLocationButtonEnabled: false,
-                          zoomControlsEnabled: false,
-                          mapToolbarEnabled: false,
-                        ),
-                      ),
-
-                      // LOCATION BOX
-                      Positioned(
-                        top: 20,
-                        left: 30,
-                        right: 30,
-                        child: Container(
-                          height: 72,
-                          padding:
-                              const EdgeInsets.symmetric(
-                            horizontal: 20,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius:
-                                BorderRadius.circular(4),
-                          ),
-                          child: const Row(
-                            children: [
-                              Icon(
-                                Icons.location_on_outlined,
-                                color: AppColors.primary,
-                                size: 32,
-                              ),
-                              SizedBox(width: 14),
-                              Expanded(
-                                child: Text(
-                                  'Near Universidad de los Andes',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight:
-                                        FontWeight.w600,
-                                    color:
-                                        AppColors.darkText,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      // MY PARKING CARD
-                      Positioned(
-                        left: 30,
-                        right: 30,
-                        bottom: 20,
-                        child: Container(
-                          padding:
-                              const EdgeInsets.fromLTRB(
-                            20,
-                            18,
-                            20,
-                            18,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius:
-                                BorderRadius.circular(28),
-                          ),
-                          child: Column(
-                            mainAxisSize:
-                                MainAxisSize.min,
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
-                              Align(
-                                alignment:
-                                    Alignment.centerLeft,
-                                child: Container(
-                                  width: 170,
-                                  padding:
-                                      const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 10,
-                                  ),
-                                  decoration:
-                                      BoxDecoration(
-                                    color:
-                                        AppColors.lightPurple,
-                                    borderRadius:
-                                        BorderRadius.circular(
-                                      14,
-                                    ),
-                                  ),
-                                  child: const Text(
-                                    'MY PARKING',
-                                    style: TextStyle(
-                                      color:
-                                          AppColors.primary,
-                                      fontSize: 14,
-                                      fontWeight:
-                                          FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                              const SizedBox(height: 14),
-
-                              FutureBuilder<ParkingSession?>(
-                                future: sessionController.loadActiveSession(),
-                                builder: (context, sessionSnapshot) {
-                                  if (sessionSnapshot.connectionState ==
-                                      ConnectionState.waiting) {
-                                    return const SizedBox(
-                                      height: 55,
-                                      child: Center(
-                                        child: CircularProgressIndicator(),
-                                      ),
-                                    );
-                                  }
-
-                                  final session = sessionSnapshot.data;
-
-                                  if (session == null) {
-                                    return const Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'No active parking',
-                                          style: TextStyle(
-                                            fontSize: 21,
-                                            fontWeight: FontWeight.w700,
-                                            color: AppColors.darkText,
-                                          ),
-                                        ),
-                                        SizedBox(height: 8),
-                                        Text(
-                                          'Your current parking will appear here.',
-                                          style: TextStyle(
-                                            fontSize: 15,
-                                            color: AppColors.greyText,
-                                          ),
-                                        ),
-                                      ],
-                                    );
-                                  }
-
-                                  return FutureBuilder<Parking?>(
-                                    future: parkingController.loadParkingById(
-                                      session.parkingId,
-                                    ),
-                                    builder: (context, parkingSnapshot) {
-                                      if (parkingSnapshot.connectionState ==
-                                          ConnectionState.waiting) {
-                                        return const SizedBox(
-                                          height: 55,
-                                          child: Center(
-                                            child: CircularProgressIndicator(),
-                                          ),
-                                        );
-                                      }
-
-                                      final parking = parkingSnapshot.data;
-
-                                      if (parking == null) {
-                                        return const Text(
-                                          'Active parking',
-                                          style: TextStyle(
-                                            fontSize: 21,
-                                            fontWeight: FontWeight.w700,
-                                            color: AppColors.darkText,
-                                          ),
-                                        );
-                                      }
-
-                                      final pickupTime =
-                                          session.pickupTime.toLocal();
-
-                                      int hour = pickupTime.hour;
-                                      final period = hour >= 12 ? 'PM' : 'AM';
-
-                                      hour = hour % 12;
-
-                                      if (hour == 0) {
-                                        hour = 12;
-                                      }
-
-                                      final minute = pickupTime.minute
-                                          .toString()
-                                          .padLeft(2, '0');
-
-                                      return Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            parking.name,
-                                            style: const TextStyle(
-                                              fontSize: 21,
-                                              fontWeight: FontWeight.w700,
-                                              color: AppColors.darkText,
-                                            ),
-                                          ),
-
-                                          const SizedBox(height: 8),
-
-                                          Text(
-                                            'Car ABC123 · Pick up at '
-                                            '$hour:$minute $period',
-                                            style: const TextStyle(
-                                              fontSize: 15,
-                                              color: AppColors.greyText,
-                                            ),
-                                          ),
-
-                                          const SizedBox(height: 5),
-
-                                          Text(
-                                            parking.address,
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              color: AppColors.greyText,
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  );
-                                },
-                              ),
-                                                          
-                              const SizedBox(height: 16),
-
-                              SizedBox(
-                                width: double.infinity,
-                                height: 52,
-                                child: ElevatedButton(
-                                  onPressed: onOpenMyParking,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.primary,
-                                    foregroundColor: Colors.white,
-                                    elevation: 0,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius:
-                                          BorderRadius.circular(14),
-                                    ),
-                                  ),
-                                  child: const Text(
-                                    'View my parking',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
+              child: ParkingMapPanel(
+                analytics: analytics,
+                controller: parkingController,
+                onSelectParking: onSelectParking,
+                onOpenParkingList: () => onNavTap(1),
+                activeParkingCard: _ActiveParkingCard(
+                  sessionController: sessionController,
+                  parkingController: parkingController,
+                  onOpen: onOpenMyParking,
+                ),
               ),
             ),
-
             const SizedBox(height: 15),
-
-            NavBar(
-              currentIndex: currentIndex,
-              onTap: onNavTap,
-            ),
+            NavBar(currentIndex: currentIndex, onTap: onNavTap),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ActiveParkingData {
+  final ParkingSession? session;
+  final Parking? parking;
+
+  const _ActiveParkingData({this.session, this.parking});
+}
+
+class _ActiveParkingCard extends StatefulWidget {
+  final SessionController sessionController;
+  final ParkingController parkingController;
+  final VoidCallback onOpen;
+
+  const _ActiveParkingCard({
+    required this.sessionController,
+    required this.parkingController,
+    required this.onOpen,
+  });
+
+  @override
+  State<_ActiveParkingCard> createState() => _ActiveParkingCardState();
+}
+
+class _ActiveParkingCardState extends State<_ActiveParkingCard> {
+  late Future<_ActiveParkingData> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ActiveParkingCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sessionController != widget.sessionController ||
+        oldWidget.parkingController != widget.parkingController) {
+      _future = _load();
+    }
+  }
+
+  Future<_ActiveParkingData> _load() async {
+    final session = await widget.sessionController.loadActiveSession().timeout(
+      const Duration(seconds: 10),
+    );
+    if (session == null) return const _ActiveParkingData();
+    final details = await widget.parkingController.loadParkingDetails(
+      session.parkingId,
+    );
+    return _ActiveParkingData(session: session, parking: details.parking);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'MY PARKING',
+            style: TextStyle(
+              color: AppColors.primary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          FutureBuilder<_ActiveParkingData>(
+            future: _future,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const SizedBox(
+                  height: 40,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (snapshot.hasError) {
+                return const Text('Could not refresh your active parking.');
+              }
+              final session = snapshot.data?.session;
+              final parking = snapshot.data?.parking;
+              if (session == null) {
+                return const Text(
+                  'No active parking',
+                  style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700),
+                );
+              }
+              final pickup = TimeOfDay.fromDateTime(
+                session.pickupTime.toLocal(),
+              );
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    parking?.name ?? 'Active parking',
+                    style: const TextStyle(
+                      fontSize: 21,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    'Pick up at ${MaterialLocalizations.of(context).formatTimeOfDay(pickup)}',
+                  ),
+                  if (parking != null) Text(parking.address),
+                  if (session.isFromCache)
+                    const Text(
+                      'Saved confirmed session; current status may be outdated.',
+                    ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: widget.onOpen,
+              child: const Text('View my parking'),
+            ),
+          ),
+        ],
       ),
     );
   }

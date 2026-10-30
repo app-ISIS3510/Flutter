@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/navigation_bar.dart';
 import '../../widgets/pickup_widgets.dart';
+import '../../widgets/user_error_notice.dart';
 
 TextStyle profileText(
   double size, {
@@ -118,21 +119,7 @@ class ProfileError extends StatelessWidget {
   final String message;
   const ProfileError(this.message, {super.key});
   @override
-  Widget build(BuildContext context) => Semantics(
-    liveRegion: true,
-    child: Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFCECF0),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        message,
-        style: profileText(12, color: const Color(0xFFA3313F)),
-      ),
-    ),
-  );
+  Widget build(BuildContext context) => UserErrorNotice(message);
 }
 
 class ProfileNotice extends StatelessWidget {

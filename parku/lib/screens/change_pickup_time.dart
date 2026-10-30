@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/user_error_notice.dart';
+import '../utils/user_error_message.dart';
+
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/pickup_widgets.dart';
-import '../controllers/session_controller.dart';
 import 'profile/profile_widgets.dart';
 
 class ChangePickupTimeScreen extends StatefulWidget {
@@ -154,9 +156,7 @@ class _ChangePickupTimeScreenState extends State<ChangePickupTimeScreen> {
     } catch (error) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(SessionController.messageFor(error))),
-      );
+      showUserError(context, error, action: ErrorAction.updatePickup);
     } finally {
       if (mounted) {
         setState(() {
@@ -347,3 +347,4 @@ class _ChangePickupTimeScreenState extends State<ChangePickupTimeScreen> {
     );
   }
 }
+
