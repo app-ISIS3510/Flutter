@@ -14,6 +14,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'support/offline_fakes.dart';
 
+class DisconnectAfterSelection extends UnstableUserRepository {
+  @override
+  Future<void> selectVehicle(String id) async {
+    await super.selectVehicle(id);
+    online = false;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   sqfliteFfiInit();
@@ -72,6 +80,31 @@ void main() {
       remote.online = false;
       expect(await service.getVehicles(), isEmpty);
       expect(service.vehiclesFromCache, isTrue);
+    },
+  );
+
+  test(
+    'a confirmed selection cannot return the previous cached vehicle',
+    () async {
+      remote = DisconnectAfterSelection();
+      await remote.addVehicle(VehicleType.car, 'ABC123');
+      await remote.addVehicle(VehicleType.car, 'DEF456');
+      remote.writes = 0;
+      service = ProfileService(remote, local: local, store: store);
+      final controller = ProfileController(service);
+      addTearDown(controller.dispose);
+      await controller.load();
+
+      expect(await controller.selectVehicle('vehicle-2'), isFalse);
+      expect(controller.error, contains('saved'));
+      expect(controller.usingSavedData, isTrue);
+      expect(remote.vehicles.singleWhere((v) => v.isSelected).id, 'vehicle-2');
+
+      remote.online = true;
+      await controller.load();
+      expect(controller.selectedVehicle?.id, 'vehicle-2');
+      expect(controller.error, isNull);
+      expect(remote.writes, 1);
     },
   );
 

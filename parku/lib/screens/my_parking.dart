@@ -226,36 +226,39 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                             shape: BoxShape.circle,
                             color: AppColors.background,
                           ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(
-                                Icons.timer_outlined,
-                                color: AppColors.primary,
-                                size: 38,
-                              ),
-
-                              const SizedBox(height: 8),
-
-                              Text(
-                                remainingText,
-                                style: const TextStyle(
-                                  fontSize: 50,
-                                  fontWeight: FontWeight.w700,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.timer_outlined,
                                   color: AppColors.primary,
+                                  size: 38,
                                 ),
-                              ),
 
-                              const SizedBox(height: 4),
+                                const SizedBox(height: 8),
 
-                              const Text(
-                                'hours : minutes',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: AppColors.greyText,
+                                Text(
+                                  remainingText,
+                                  style: const TextStyle(
+                                    fontSize: 50,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary,
+                                  ),
                                 ),
-                              ),
-                            ],
+
+                                const SizedBox(height: 4),
+
+                                const Text(
+                                  'hours : minutes',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: AppColors.greyText,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -310,7 +313,9 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
 
                           const SizedBox(height: 10),
 
-                          Row(
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 4,
                             children: [
                               Text(
                                 widget.session.vehicleType == 'motorcycle'
@@ -321,7 +326,6 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                                   color: AppColors.greyText,
                                 ),
                               ),
-                              SizedBox(width: 12),
                               Text(
                                 widget.session.vehiclePlate ??
                                     'Plate not recorded',

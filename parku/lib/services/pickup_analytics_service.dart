@@ -10,6 +10,7 @@ class PickupAnalyticsService {
   final Duration timeout;
   Future<void> _writing = Future<void>.value();
   Future<bool>? _sending;
+  String? _sendingUser;
   bool saveFailed = false;
 
   PickupAnalyticsService(
@@ -76,12 +77,21 @@ class PickupAnalyticsService {
   }
 
   Future<bool> flush() {
-    if (_sending != null) return _sending!;
+    final owner = repository.userId;
+    if (owner == null) return Future.value(false);
+    if (_sending != null) {
+      if (_sendingUser == owner) return _sending!;
+      return _sending!.then((_) => flush());
+    }
     final sending = _flush();
     _sending = sending;
+    _sendingUser = owner;
     unawaited(
       sending.then((_) {
-        if (identical(_sending, sending)) _sending = null;
+        if (identical(_sending, sending)) {
+          _sending = null;
+          _sendingUser = null;
+        }
       }),
     );
     return sending;
