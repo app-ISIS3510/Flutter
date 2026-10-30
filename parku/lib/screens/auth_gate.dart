@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../controllers/auth_controller.dart';
 import '../repositories/auth_repository.dart';
 import '../services/auth_service.dart';
+import '../utils/error_messages.dart';
+import '../widgets/user_error_notice.dart';
 import 'check_email.dart';
 import 'create_account.dart';
 import 'main_navigation.dart';
@@ -78,7 +80,7 @@ class _AuthGateState extends State<AuthGate> {
 
       setState(() {
         isProcessingRecovery = false;
-        recoveryError = error.toString();
+        recoveryError = ErrorMessages.invalidRecoveryLink;
       });
     }
   }
@@ -121,7 +123,12 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   Future<void> _backToSignInAfterPasswordUpdate() async {
-    await authController.signOut();
+    try {
+      await authController.signOut();
+    } catch (error) {
+      if (mounted) showUserError(context, error, action: ErrorAction.signOut);
+      return;
+    }
 
     if (!mounted) return;
 
@@ -144,10 +151,7 @@ class _AuthGateState extends State<AuthGate> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'The password reset link is invalid or has expired.',
-                  textAlign: TextAlign.center,
-                ),
+                UserErrorNotice(recoveryError!),
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: () {

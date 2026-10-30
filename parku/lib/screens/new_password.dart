@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../controllers/auth_controller.dart';
 import '../theme/app_theme.dart';
+import '../utils/user_error_message.dart';
+import '../widgets/user_error_notice.dart';
 
 class NewPasswordScreen extends StatefulWidget {
   final AuthController controller;
@@ -38,7 +40,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
 
     if (password.length < 8) {
       setState(() {
-        errorMessage = 'Password must be at least 8 characters';
+        errorMessage = 'Choose a password with at least 8 characters.';
       });
       return;
     }
@@ -58,7 +60,10 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
       if (!mounted) return;
 
       setState(() {
-        errorMessage = error.toString().replaceFirst('Exception: ', '');
+        errorMessage = userErrorMessage(
+          error,
+          action: ErrorAction.updatePassword,
+        );
       });
     } finally {
       if (mounted) {
@@ -175,10 +180,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
                   ),
                   if (errorMessage != null) ...[
                     const SizedBox(height: 10),
-                    Text(
-                      errorMessage!,
-                      style: const TextStyle(fontSize: 13, color: Colors.red),
-                    ),
+                    UserErrorNotice(errorMessage!),
                   ],
                   const SizedBox(height: 16),
                   SizedBox(

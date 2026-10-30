@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../controllers/auth_controller.dart';
 import '../theme/app_theme.dart';
+import '../widgets/user_error_notice.dart';
+import '../utils/user_error_message.dart';
 
 class SignInScreen extends StatefulWidget {
   final AuthController controller;
@@ -52,11 +54,7 @@ class _SignInScreenState extends State<SignInScreen> {
     } catch (error) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Exception: ', '')),
-        ),
-      );
+      showUserError(context, error, action: ErrorAction.signIn);
     } finally {
       if (mounted) {
         setState(() {

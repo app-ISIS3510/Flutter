@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
+import '../widgets/user_error_notice.dart';
+import '../utils/user_error_message.dart';
 
 class EndParkingScreen extends StatefulWidget {
   final Future<void> Function() onConfirmEndParking;
@@ -38,13 +40,7 @@ class _EndParkingScreenState extends State<EndParkingScreen> {
     } catch (error) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Could not end parking: $error',
-          ),
-        ),
-      );
+      showUserError(context, error, action: ErrorAction.endParking);
     } finally {
       if (mounted) {
         setState(() {
@@ -63,12 +59,7 @@ class _EndParkingScreenState extends State<EndParkingScreen> {
           children: [
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  30,
-                  22,
-                  30,
-                  20,
-                ),
+                padding: const EdgeInsets.fromLTRB(30, 22, 30, 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

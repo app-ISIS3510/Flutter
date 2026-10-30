@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../controllers/auth_controller.dart';
 import '../theme/app_theme.dart';
+import '../widgets/user_error_notice.dart';
+import '../utils/user_error_message.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   final AuthController controller;
@@ -16,8 +18,7 @@ class ResetPasswordScreen extends StatefulWidget {
   });
 
   @override
-  State<ResetPasswordScreen> createState() =>
-      _ResetPasswordScreenState();
+  State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
 }
 
 class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
@@ -41,9 +42,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     try {
       final email = emailController.text.trim();
 
-      await widget.controller.resetPassword(
-        email: email,
-      );
+      await widget.controller.resetPassword(email: email);
 
       if (!mounted) return;
 
@@ -51,13 +50,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     } catch (error) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            error.toString().replaceFirst('Exception: ', ''),
-          ),
-        ),
-      );
+      showUserError(context, error, action: ErrorAction.resetPassword);
     } finally {
       if (mounted) {
         setState(() {
@@ -70,28 +63,17 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   InputDecoration _inputDecoration() {
     return InputDecoration(
       hintText: 'Email address',
-      hintStyle: const TextStyle(
-        color: AppColors.greyText,
-        fontSize: 14,
-      ),
+      hintStyle: const TextStyle(color: AppColors.greyText, fontSize: 14),
       filled: true,
       fillColor: AppColors.white,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 13,
-        vertical: 14,
-      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 14),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(
-          color: Color(0xFFE1DDEA),
-        ),
+        borderSide: const BorderSide(color: Color(0xFFE1DDEA)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(
-          color: AppColors.primary,
-          width: 1.3,
-        ),
+        borderSide: const BorderSide(color: AppColors.primary, width: 1.3),
       ),
     );
   }
@@ -103,16 +85,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: 420,
-            ),
+            constraints: const BoxConstraints(maxWidth: 420),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                18,
-                18,
-                18,
-                24,
-              ),
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -189,9 +164,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       controller: emailController,
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.done,
-                      autofillHints: const [
-                        AutofillHints.email,
-                      ],
+                      autofillHints: const [AutofillHints.email],
                       onSubmitted: (_) => _sendResetLink(),
                       decoration: _inputDecoration(),
                     ),
@@ -202,8 +175,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   SizedBox(
                     height: 44,
                     child: FilledButton(
-                      onPressed:
-                          isLoading ? null : _sendResetLink,
+                      onPressed: isLoading ? null : _sendResetLink,
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         shape: RoundedRectangleBorder(

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../controllers/auth_controller.dart';
 import '../theme/app_theme.dart';
+import '../widgets/user_error_notice.dart';
+import '../utils/user_error_message.dart';
 
 class CreateAccountScreen extends StatefulWidget {
   final AuthController controller;
@@ -59,11 +61,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     } catch (error) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Exception: ', '')),
-        ),
-      );
+      showUserError(context, error, action: ErrorAction.createAccount);
     } finally {
       if (mounted) {
         setState(() {
