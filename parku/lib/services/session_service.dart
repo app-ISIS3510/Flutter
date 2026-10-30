@@ -6,6 +6,9 @@ class SessionService {
 
   SessionService(this.repository);
 
+  bool get lastReadFromCache => repository.lastReadFromCache;
+  String? get currentUserId => repository.client.auth.currentUser?.id;
+
   Future<ParkingSession> startParking({
     required String parkingId,
     required DateTime pickupTime,

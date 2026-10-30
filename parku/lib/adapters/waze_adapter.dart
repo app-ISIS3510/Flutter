@@ -1,5 +1,3 @@
-import 'package:url_launcher/url_launcher.dart';
-
 import 'navigation_adapter.dart';
 
 class WazeAdapter implements NavigationAdapter {
@@ -7,18 +5,14 @@ class WazeAdapter implements NavigationAdapter {
   Future<void> openNavigation({
     required double latitude,
     required double longitude,
-  }) async {
-    final uri = Uri.parse(
-      'https://waze.com/ul?ll=$latitude,$longitude&navigate=yes',
+  }) {
+    return launchNavigationLinks(
+      appUri: Uri.parse('waze://?ll=$latitude,$longitude&navigate=yes'),
+      webUri: Uri.https('waze.com', '/ul', {
+        'll': '$latitude,$longitude',
+        'navigate': 'yes',
+        'utm_source': 'parku',
+      }),
     );
-
-    final launched = await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    );
-
-    if (!launched) {
-      throw Exception('Could not open Waze');
-    }
   }
 }

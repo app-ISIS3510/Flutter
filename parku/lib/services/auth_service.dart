@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../repositories/auth_repository.dart';
+import '../utils/auth_validation.dart';
 
 class AuthService {
   final AuthRepository repository;
@@ -15,13 +16,8 @@ class AuthService {
     required String email,
     required String password,
   }) {
-    if (email.trim().isEmpty) {
-      throw Exception('Email is required');
-    }
-
-    if (password.isEmpty) {
-      throw Exception('Password is required');
-    }
+    AuthValidation.email(email);
+    AuthValidation.password(password);
 
     return repository.signIn(email: email, password: password);
   }
@@ -31,17 +27,9 @@ class AuthService {
     required String email,
     required String password,
   }) {
-    if (fullName.trim().isEmpty) {
-      throw Exception('Full name is required');
-    }
-
-    if (email.trim().isEmpty) {
-      throw Exception('Email is required');
-    }
-
-    if (password.length < 8) {
-      throw Exception('Password must be at least 8 characters');
-    }
+    AuthValidation.name(fullName);
+    AuthValidation.email(email);
+    AuthValidation.password(password, isNew: true);
 
     return repository.signUp(
       fullName: fullName,
@@ -51,17 +39,13 @@ class AuthService {
   }
 
   Future<void> resetPassword({required String email}) {
-    if (email.trim().isEmpty) {
-      throw Exception('Email is required');
-    }
+    AuthValidation.email(email);
 
     return repository.resetPassword(email: email);
   }
 
   Future<UserResponse> updatePassword({required String password}) {
-    if (password.length < 8) {
-      throw Exception('Password must be at least 8 characters');
-    }
+    AuthValidation.password(password, isNew: true);
 
     return repository.updatePassword(password: password);
   }

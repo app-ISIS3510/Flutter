@@ -1,6 +1,7 @@
 import '../models/user_profile.dart';
 import '../models/vehicle.dart';
 import '../repositories/user_repository.dart';
+import '../utils/error_messages.dart';
 
 class ProfileService {
   final UserRepository repository;
@@ -33,18 +34,21 @@ class ProfileService {
         : 'Enter a complete license plate to continue.';
   }
 
-  Future<UserProfile> getProfile() => repository.getProfile();
-  Future<bool> isAdmin() => repository.isAdmin();
-  Future<List<Vehicle>> getVehicles() => repository.getVehicles();
+  Future<UserProfile> getProfile() =>
+      repository.getProfile().timeout(const Duration(seconds: 8));
+  Future<bool> isAdmin() =>
+      repository.isAdmin().timeout(const Duration(seconds: 4));
+  Future<List<Vehicle>> getVehicles() =>
+      repository.getVehicles().timeout(const Duration(seconds: 8));
   Future<UserProfile> updateProfile(String name, String email) {
     final error = validateName(name) ?? validateEmail(email);
-    if (error != null) throw FormatException(error);
+    if (error != null) throw UserInputException(error);
     return repository.updateProfile(name.trim(), email.trim());
   }
 
   Future<void> addVehicle(VehicleType type, String plate) {
     final error = validatePlate(type, plate);
-    if (error != null) throw FormatException(error);
+    if (error != null) throw UserInputException(error);
     return repository.addVehicle(type, normalizePlate(plate));
   }
 

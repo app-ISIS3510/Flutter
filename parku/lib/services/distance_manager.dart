@@ -1,41 +1,42 @@
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 class DistanceManager {
-  Future<Position> getCurrentPosition() async {
-    final serviceEnabled =
-        await Geolocator.isLocationServiceEnabled();
+  Future<Position> getCurrentPosition({bool useDeviceGps = false}) async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
     if (!serviceEnabled) {
       throw Exception('Location services are disabled.');
     }
 
-    LocationPermission permission =
-        await Geolocator.checkPermission();
+    LocationPermission permission = await Geolocator.checkPermission();
 
     if (permission == LocationPermission.denied) {
-      permission =
-          await Geolocator.requestPermission();
+      permission = await Geolocator.requestPermission();
     }
 
     if (permission == LocationPermission.denied) {
-      throw Exception(
-        'Location permission was denied.',
-      );
+      throw Exception('Location permission was denied.');
     }
 
-    if (permission ==
-        LocationPermission.deniedForever) {
-      throw Exception(
-        'Location permission was permanently denied.',
-      );
+    if (permission == LocationPermission.deniedForever) {
+      throw Exception('Location permission was permanently denied.');
     }
 
     return Geolocator.getCurrentPosition(
       locationSettings:
-          const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        timeLimit: Duration(seconds: 20),
-      ),
+          useDeviceGps &&
+              !kIsWeb &&
+              defaultTargetPlatform == TargetPlatform.android
+          ? AndroidSettings(
+              forceLocationManager: true,
+              accuracy: LocationAccuracy.high,
+              timeLimit: const Duration(seconds: 20),
+            )
+          : const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              timeLimit: Duration(seconds: 20),
+            ),
     );
   }
 

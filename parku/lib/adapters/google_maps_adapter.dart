@@ -1,5 +1,3 @@
-import 'package:url_launcher/url_launcher.dart';
-
 import 'navigation_adapter.dart';
 
 class GoogleMapsAdapter implements NavigationAdapter {
@@ -7,19 +5,15 @@ class GoogleMapsAdapter implements NavigationAdapter {
   Future<void> openNavigation({
     required double latitude,
     required double longitude,
-  }) async {
-    final uri = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1'
-      '&destination=$latitude,$longitude',
+  }) {
+    return launchNavigationLinks(
+      appUri: Uri.parse('google.navigation:q=$latitude,$longitude&mode=d'),
+      webUri: Uri.https('www.google.com', '/maps/dir/', {
+        'api': '1',
+        'destination': '$latitude,$longitude',
+        'travelmode': 'driving',
+        'dir_action': 'navigate',
+      }),
     );
-
-    final launched = await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    );
-
-    if (!launched) {
-      throw Exception('Could not open Google Maps');
-    }
   }
 }
