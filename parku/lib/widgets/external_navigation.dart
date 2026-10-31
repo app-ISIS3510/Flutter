@@ -1,13 +1,16 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../controllers/navigation_controller.dart';
+import '../controllers/analytics_controller.dart';
 import '../models/navigation_provider.dart';
 import '../models/parking.dart';
 import '../theme/app_theme.dart';
 import 'user_error_notice.dart';
+import '../utils/client_id.dart';
 
 /// Returns the provider whose link was accepted by the operating system.
 /// Opening a link does not guarantee that the provider can calculate a route.
@@ -16,7 +19,11 @@ Future<NavigationProvider?> openExternalNavigation({
   required NavigationController controller,
   required NavigationProvider provider,
   required Parking parking,
+  AnalyticsController? analytics,
+  String screen = 'parking_detail',
+  String? activeSessionId,
 }) async {
+  final analyticsOwner = analytics?.currentUserId;
   final latitude = parking.latitude;
   final longitude = parking.longitude;
   final hasCoordinates = controller.hasValidCoordinates(latitude, longitude);
@@ -93,11 +100,42 @@ Future<NavigationProvider?> openExternalNavigation({
   var selectedProvider = provider;
   while (context.mounted) {
     try {
+      final requestedAt = DateTime.now().toUtc();
       await controller.openNavigation(
         provider: selectedProvider,
         latitude: latitude!,
         longitude: longitude!,
       );
+      if (analytics != null &&
+          analyticsOwner != null &&
+          analytics.currentUserId == analyticsOwner) {
+        // Preserve the handoff time even when enrichment or offline sync is late.
+        // Telemetry failures must never turn a successful launch into a retry.
+        unawaited(
+          Future<void>.sync(
+            () => analytics.track(
+              eventType: 'navigation_opened',
+              screen: screen,
+              parkingId: parking.id,
+              occurredAt: requestedAt,
+              metadata: {
+                'event_schema_version': 2,
+                'navigation_request_id': newClientId(),
+                'provider': selectedProvider.analyticsValue,
+                'requested_provider': provider.analyticsValue,
+                'used_fallback': selectedProvider != provider,
+                'active_session_id': ?activeSessionId,
+              },
+            ),
+          ).catchError((Object error, StackTrace stackTrace) {
+            developer.log(
+              'Could not queue navigation analytics',
+              error: error,
+              stackTrace: stackTrace,
+            );
+          }),
+        );
+      }
       return selectedProvider;
     } catch (error, stackTrace) {
       developer.log(
