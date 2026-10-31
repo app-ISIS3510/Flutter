@@ -6,6 +6,7 @@ import '../controllers/parking_controller.dart';
 import '../controllers/analytics_controller.dart';
 import '../utils/screen_load_reporter.dart';
 import '../models/parking.dart';
+import '../models/parking_search_result.dart';
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/parking_card.dart';
@@ -37,7 +38,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
 
   final FocusNode _searchFocusNode = FocusNode();
 
-  late Future<List<Parking>> _resultsFuture;
+  late Future<ParkingSearchResult> _resultsFuture;
   Timer? _searchDebounce;
   bool _isDebouncing = false;
   late ScreenLoadReporter _screenLoad;
@@ -49,7 +50,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
 
     _searchController = TextEditingController(text: widget.initialQuery);
 
-    _resultsFuture = widget.parkingController.searchParkingLots(
+    _resultsFuture = widget.parkingController.searchParkingLotsWithSource(
       widget.initialQuery,
     );
   }
@@ -100,9 +101,11 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       );
       _isDebouncing = false;
       if (trimmedQuery.isEmpty) {
-        _resultsFuture = Future<List<Parking>>.value([]);
+        _resultsFuture = Future.value(
+          const ParkingSearchResult(parkingLots: []),
+        );
       } else {
-        _resultsFuture = widget.parkingController.searchParkingLots(
+        _resultsFuture = widget.parkingController.searchParkingLotsWithSource(
           trimmedQuery,
         );
       }
@@ -160,14 +163,17 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(30, 20, 30, 24),
-                child: FutureBuilder<List<Parking>>(
+                child: FutureBuilder<ParkingSearchResult>(
                   future: _resultsFuture,
                   builder: (context, snapshot) {
                     final isLoading =
                         _isDebouncing ||
                         snapshot.connectionState == ConnectionState.waiting;
 
-                    final parkingLots = snapshot.data ?? [];
+                    final searchResult = snapshot.data;
+                    final parkingLots =
+                        searchResult?.parkingLots ?? <Parking>[];
+                    final isFromCache = searchResult?.isFromCache ?? false;
 
                     final hasResults = parkingLots.isNotEmpty;
                     if (!isLoading &&
@@ -175,7 +181,11 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                         _searchController.text.trim().isNotEmpty) {
                       _screenLoad.presented(
                         context,
-                        source: snapshot.hasError ? 'none' : 'network',
+                        source: snapshot.hasError
+                            ? 'none'
+                            : isFromCache
+                            ? 'cache'
+                            : 'network',
                         failed: snapshot.hasError,
                       );
                     }
@@ -268,6 +278,64 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                         ),
 
                         const SizedBox(height: 12),
+
+                        if (!isLoading &&
+                            !snapshot.hasError &&
+                            isFromCache) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: AppColors.lightPurple,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.cloud_off_outlined,
+                                  color: AppColors.primary,
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Saved parking results',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.darkText,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        'Showing locally stored information. Availability may have changed.',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: AppColors.greyText,
+                                        ),
+                                      ),
+                                      if (searchResult?.updatedAt != null) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Last updated: ${searchResult!.updatedAt!.toLocal()}',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.greyText,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
 
                         if (isLoading)
                           const Padding(

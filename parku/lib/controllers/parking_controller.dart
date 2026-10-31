@@ -8,6 +8,7 @@ import '../services/parking_service.dart';
 import '../state/parking_list_state.dart';
 import '../state/parking_detail_state.dart';
 import '../state/nearby_parking_state.dart';
+import '../models/parking_search_result.dart';
 
 class ParkingController {
   final ParkingService service;
@@ -54,19 +55,19 @@ class ParkingController {
     return service.searchParkingLots(query);
   }
 
+  Future<ParkingSearchResult> searchParkingLotsWithSource(String query) {
+    return service.searchParkingLotsWithSource(query);
+  }
+
   Future<List<Parking>> loadNearestParkingLots({int limit = 4}) {
     return service.getNearestParkingLots(limit: limit);
   }
 
-  Future<List<ParkingOption>> loadParkingOptions({
-    VehicleType? vehicleType,
-  }) {
+  Future<List<ParkingOption>> loadParkingOptions({VehicleType? vehicleType}) {
     return service.getParkingOptions(vehicleType: vehicleType);
   }
 
-  Future<NearbyParkingState> loadNearbyParking({
-    VehicleType? vehicleType,
-  }) {
+  Future<NearbyParkingState> loadNearbyParking({VehicleType? vehicleType}) {
     return service.getNearbyParking(vehicleType: vehicleType);
   }
 
