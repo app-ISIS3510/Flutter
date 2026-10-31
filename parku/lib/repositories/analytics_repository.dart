@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/local/analytics_local_data_source.dart';
 import '../models/pending_analytics_event.dart';
+import '../models/pickup_choice_summary.dart';
 import '../utils/client_id.dart';
 
 class AnalyticsRepository {
@@ -20,6 +21,20 @@ class AnalyticsRepository {
            localDataSource ?? AnalyticsLocalDataSource();
 
   String? get userId => client.auth.currentUser?.id;
+
+  Future<PickupChoiceSummary> getPickupChoices() async {
+    final owner = userId;
+    if (owner == null) throw const AuthException('Sign in to continue.');
+    final rows = await client
+        .from('bq9_pickup_time_choice_last_7_days')
+        .select(
+          'pickup_choice,successful_starts,percentage,total_successful_starts',
+        );
+    if (userId != owner) {
+      throw const AuthException('The signed-in account changed.');
+    }
+    return PickupChoiceSummary.fromRows(rows, updatedAt: DateTime.now().toUtc());
+  }
 
   Future<void> savePickupChoice(
     Map<String, dynamic> event,

@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import '../models/parking_session.dart';
+import '../models/pickup_choice_summary.dart';
 import '../repositories/analytics_repository.dart';
 import '../repositories/user_local_store.dart';
+import 'connection_failure.dart';
 
 class PickupAnalyticsService {
   final AnalyticsRepository repository;
@@ -18,6 +20,28 @@ class PickupAnalyticsService {
     this.store, {
     this.timeout = const Duration(seconds: 8),
   });
+
+  Future<PickupChoiceSummary> loadSummary() async {
+    final owner = store.userId;
+    try {
+      final summary = await repository.getPickupChoices().timeout(timeout);
+      store.checkUser(owner);
+      try {
+        await store.write('pickup_choice_summary', summary.toMap());
+      } catch (_) {
+        store.checkUser(owner);
+      }
+      store.checkUser(owner);
+      return summary;
+    } catch (error) {
+      store.checkUser(owner);
+      if (!isConnectionError(error)) rethrow;
+      final saved = await store.read('pickup_choice_summary');
+      store.checkUser(owner);
+      if (saved == null) rethrow;
+      return PickupChoiceSummary.fromMap(saved);
+    }
+  }
 
   Future<void> _editQueue(Future<void> Function() action) {
     final next = _writing.then((_) => action());
