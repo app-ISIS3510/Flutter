@@ -16,6 +16,7 @@ import '../utils/screen_load_reporter.dart';
 import '../widgets/most_used_parking_section.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/parking_card.dart';
+import '../widgets/offline_data_status_indicator.dart';
 
 class ParkingListScreen extends StatefulWidget {
   final int currentIndex;
@@ -658,8 +659,6 @@ class _ParkingListScreenState extends State<ParkingListScreen>
 
                       final notices = [
                         if (data?.locationNotice != null) data!.locationNotice!,
-                        if (data != null && catalog?.isFromCache == true)
-                          'Saved availability estimate.',
                         if (useCatalog)
                           loading
                               ? 'All parking lots. Nearby results are loading.'
@@ -685,9 +684,30 @@ class _ParkingListScreenState extends State<ParkingListScreen>
                             const SizedBox(height: 14),
                         itemBuilder: (context, index) {
                           if (index == 0) {
-                            return _buildHeader(
-                              loading,
-                              notices.isEmpty ? null : notices.join('\n'),
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildHeader(
+                                  loading,
+                                  notices.isEmpty ? null : notices.join('\n'),
+                                ),
+                                if (!waiting &&
+                                    !failed &&
+                                    catalog?.isFromCache == true) ...[
+                                  const SizedBox(height: 12),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 32,
+                                    ),
+                                    child: OfflineDataStatusIndicator(
+                                      isFromCache: true,
+                                      updatedAt: catalog?.updatedAt,
+                                      title: 'Saved parking data',
+                                      description: 'Showing locally stored parking information. Availability may have changed.',
+                                    ),
+                                  ),
+                                ],
+                              ],
                             );
                           }
 

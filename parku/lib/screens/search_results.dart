@@ -10,6 +10,7 @@ import '../models/parking_search_result.dart';
 import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/parking_card.dart';
+import '../widgets/offline_data_status_indicator.dart';
 
 class SearchResultsScreen extends StatefulWidget {
   final String initialQuery;
@@ -282,57 +283,11 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                         if (!isLoading &&
                             !snapshot.hasError &&
                             isFromCache) ...[
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: AppColors.lightPurple,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(
-                                  Icons.cloud_off_outlined,
-                                  color: AppColors.primary,
-                                  size: 22,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Saved parking results',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.darkText,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      const Text(
-                                        'Showing locally stored information. Availability may have changed.',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: AppColors.greyText,
-                                        ),
-                                      ),
-                                      if (searchResult?.updatedAt != null) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Last updated: ${searchResult!.updatedAt!.toLocal()}',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: AppColors.greyText,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
+                          OfflineDataStatusIndicator(
+                            isFromCache: true,
+                            updatedAt: searchResult?.updatedAt,
+                            title: 'Saved parking results',
+                            description: 'Showing locally stored information. Availability may have changed.',
                           ),
                           const SizedBox(height: 12),
                         ],
