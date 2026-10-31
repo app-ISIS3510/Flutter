@@ -875,6 +875,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     final owner = _userId;
 
     try {
+      // Reject from the details screen before loading profile, vehicle or draft.
+      await _connection.requireConnection();
+      if (!mounted || !_sameUser(owner)) return;
       await profileController.load();
       if (!mounted || !_sameUser(owner)) return;
 
@@ -1041,6 +1044,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     final owner = _userId;
 
     try {
+      // Keep the user on My parking instead of loading data for a blocked action.
+      await _connection.requireConnection();
+      if (!mounted || !_sameUser(owner)) return;
       final session = await sessionController.loadActiveSession();
 
       if (!_sameUser(owner) || session == null) return;
@@ -1245,9 +1251,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           navigationController: navigationController,
           onEndParking: () =>
               endParking(session: session, parkingName: parking.name),
-          notice:
-              sessionService.notice ??
-              (details.isFromCache ? 'Using saved parking details.' : null),
+          notice: sessionService.pendingRequest != null
+              ? 'Request pending. Refresh to confirm.'
+              : cachedSession || sessionService.usingSavedSession
+              ? 'Last confirmed session'
+              : sessionService.localSaveFailed
+              ? 'Offline copy could not be saved.'
+              : details.isFromCache
+              ? 'Saved parking details'
+              : null,
           onRefresh: openMyParking,
           onChangePickupTime: openChangePickupTime,
         );

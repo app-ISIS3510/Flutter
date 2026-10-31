@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
@@ -15,6 +16,8 @@ import 'package:parku/repositories/user_local_store.dart';
 import 'package:parku/repositories/user_repository.dart';
 import 'package:parku/screens/main_navigation.dart';
 import 'package:parku/screens/no_active_parking.dart';
+import 'package:parku/screens/change_pickup_time.dart';
+import 'package:parku/screens/my_parking.dart';
 import 'package:parku/services/pickup_analytics_service.dart';
 import 'package:parku/services/profile_service.dart';
 import 'package:parku/services/session_service.dart';
@@ -52,6 +55,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   var online = true;
   var showParking = false;
+  var sessionRequests = 0;
   Map<String, dynamic>? session;
   final events = <Map<String, dynamic>>[];
 
@@ -59,6 +63,7 @@ void main() {
     useUnavailableSqlite();
     online = true;
     showParking = false;
+    sessionRequests = 0;
     session = null;
     events.clear();
     final parking = {
@@ -86,6 +91,7 @@ void main() {
         detectSessionInUri: false,
       ),
       httpClient: MockClient((request) async {
+        if (request.url.path == '/rest/v1/parking_sessions') sessionRequests++;
         if (!online) throw const SocketException('Offline');
         Object body = [];
         switch (request.url.path) {
@@ -216,7 +222,10 @@ void main() {
         );
         await tester.ensureVisible(find.text('Park here'));
         await tester.tap(find.text('Park here'));
-        await tester.pumpAndSettle();
+        await waitForScreen(
+          tester,
+          find.textContaining('Suggested pickup time:'),
+        );
         expect(tester.takeException(), isNull, reason: 'Pickup time layout');
         expect(find.textContaining('Suggested pickup time:'), findsOneWidget);
         await tester.ensureVisible(find.text('Start parking'));
@@ -237,6 +246,36 @@ void main() {
         );
         expect(choice['metadata']['pickup_selection'], 'suggested');
         expect(choice['metadata']['session_id'], 'session-1');
+
+        // Offline changes are rejected from My parking before session reads.
+        const channel = MethodChannel('dev.fluttercommunity.plus/connectivity');
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          (_) async => [online ? 'wifi' : 'none'],
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            channel,
+            null,
+          ),
+        );
+        online = false;
+        final requestsBefore = sessionRequests;
+        await tester.ensureVisible(find.text('Change pickup time'));
+        await tester.tap(find.text('Change pickup time'));
+        await tester.pumpAndSettle();
+        expect(find.byType(MyParkingScreen), findsOneWidget);
+        expect(find.byType(ChangePickupTimeScreen), findsNothing);
+        expect(
+          find.text('Go online to change your pickup time.'),
+          findsOneWidget,
+        );
+        expect(sessionRequests, requestsBefore);
+        online = true;
+        tester
+            .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger).first)
+            .clearSnackBars();
+        await tester.pumpAndSettle();
         await tester.ensureVisible(find.text('I picked up my vehicle'));
         await tester.tap(find.text('I picked up my vehicle'));
         await tester.pumpAndSettle();

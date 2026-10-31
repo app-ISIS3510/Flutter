@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
@@ -8,6 +9,7 @@ import 'package:http/testing.dart';
 import 'package:parku/main.dart';
 import 'package:parku/screens/sign_in.dart';
 import 'package:parku/screens/parking_detail.dart';
+import 'package:parku/screens/pickup_time.dart';
 import 'package:parku/screens/profile/edit_profile_screen.dart';
 import 'package:parku/screens/profile/vehicles_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -27,12 +29,14 @@ void main() {
   List<Map<String, dynamic>> vehicles = [];
   List<Map<String, dynamic>> ranking = [];
   var favoritesFail = false;
+  var profileRequests = 0;
   setUp(() async {
     useUnavailableSqlite();
     parkingAvailable = false;
     vehicles = [];
     ranking = [];
     favoritesFail = false;
+    profileRequests = 0;
     final user = {
       'id': 'user-1',
       'aud': 'authenticated',
@@ -76,8 +80,10 @@ void main() {
               'user': user,
             };
           case '/auth/v1/user':
+            profileRequests++;
             body = user;
           case '/rest/v1/vehicles':
+            profileRequests++;
             body = vehicles;
           case '/rest/v1/parking_sessions':
           case '/rest/v1/app_admins':
@@ -271,6 +277,58 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets(
+    'offline Park here stays on details without loading profile or vehicles',
+    (tester) async {
+      var online = true;
+      const channel = MethodChannel('dev.fluttercommunity.plus/connectivity');
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        (_) async => [online ? 'wifi' : 'none'],
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          channel,
+          null,
+        ),
+      );
+      final originalPlatform = GeolocatorPlatform.instance;
+      GeolocatorPlatform.instance = FakeLocationPlatform();
+      addTearDown(() => GeolocatorPlatform.instance = originalPlatform);
+      ranking = [
+        {
+          'parking_id': 'parking-1',
+          'parking_name': 'City U Parking',
+          'completed_sessions': 8,
+        },
+      ];
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), 'juan@example.com');
+      await tester.enterText(find.byType(TextField).at(1), 'test-password');
+      await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+      await tester.pumpAndSettle();
+      parkingAvailable = true;
+      await tapNavigation(tester, 'Parking lots');
+      await tester.ensureVisible(find.text('8 completed sessions'));
+      await tester.tap(find.text('8 completed sessions'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ParkingDetailScreen), findsOneWidget);
+
+      online = false;
+      final requestsBefore = profileRequests;
+      await tester.ensureVisible(find.text('Park here'));
+      await tester.tap(find.text('Park here'));
+      await tester.pumpAndSettle();
+      expect(find.text('Go online to start parking.'), findsOneWidget);
+      expect(find.byType(ParkingDetailScreen), findsOneWidget);
+      expect(find.byType(PickupTimeScreen), findsNothing);
+      expect(profileRequests, requestsBefore);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets(
     'details stay accessible when favorites fail and can be retried',
