@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import '../controllers/navigation_controller.dart';
 import '../models/navigation_provider.dart';
 import '../models/parking.dart';
+import '../theme/app_theme.dart';
+import 'user_error_notice.dart';
 
 /// Returns the provider whose link was accepted by the operating system.
 /// Opening a link does not guarantee that the provider can calculate a route.
@@ -41,37 +43,45 @@ Future<NavigationProvider?> openExternalNavigation({
     final proceed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        icon: const Icon(Icons.cloud_off_rounded, color: AppColors.primary),
         title: Text(
-          hasNetwork == false
-              ? 'No network connection detected'
-              : 'Could not check the connection',
+          hasNetwork == false ? "You're offline" : 'Connection unavailable',
         ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '${provider.label} may need Internet to load maps or calculate '
-                'a route. Offline navigation depends on the maps and routes '
-                'already saved in that app.',
-              ),
-              const SizedBox(height: 16),
-              SelectableText(location),
+              Text('${provider.label} may need internet for directions.'),
+              if (parking.name.trim().isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  parking.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ],
             ],
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Stay here'),
+            child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () => _copyLocation(dialogContext, location),
             child: const Text('Copy location'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.white,
+            ),
             child: const Text('Open anyway'),
           ),
         ],
@@ -101,8 +111,7 @@ Future<NavigationProvider?> openExternalNavigation({
         context,
         title: 'Could not open ${selectedProvider.label}',
         message:
-            'Try another navigation app, or copy the saved location '
-            'to use it later. Maps and routes may require Internet.',
+            'Try ${selectedProvider.alternative.label} or copy the location.',
         location: location,
         alternative: selectedProvider.alternative,
       );
@@ -161,14 +170,9 @@ Future<void> _copyLocation(BuildContext context, String location) async {
   try {
     await Clipboard.setData(ClipboardData(text: location));
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Location copied.')));
+    showUserInfo(context, 'Location copied.', icon: Icons.check_circle_outline);
   } catch (_) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Could not copy. Select the location text.'),
-      ),
-    );
+    showUserMessage(context, 'Could not copy. Select the location text.');
   }
 }
