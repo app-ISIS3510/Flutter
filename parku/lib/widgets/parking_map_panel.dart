@@ -17,6 +17,8 @@ class ParkingMapPanel extends StatefulWidget {
   final VoidCallback onOpenParkingList;
   final Widget activeParkingCard;
   final AnalyticsController? analytics;
+  final ConnectivityService? connectivityService;
+  final WidgetBuilder? fallbackBuilder;
 
   const ParkingMapPanel({
     super.key,
@@ -25,6 +27,8 @@ class ParkingMapPanel extends StatefulWidget {
     required this.onOpenParkingList,
     required this.activeParkingCard,
     this.analytics,
+    this.connectivityService,
+    this.fallbackBuilder,
   });
 
   @override
@@ -33,7 +37,7 @@ class ParkingMapPanel extends StatefulWidget {
 
 class _ParkingMapPanelState extends State<ParkingMapPanel>
     with WidgetsBindingObserver {
-  final _connectivity = ConnectivityService();
+  late final ConnectivityService _connectivity;
   StreamSubscription<bool>? _connectionSubscription;
   late Future<ParkingCatalogSnapshot?> _catalogFuture;
   bool? _hasNetwork;
@@ -45,6 +49,7 @@ class _ParkingMapPanelState extends State<ParkingMapPanel>
   @override
   void initState() {
     super.initState();
+    _connectivity = widget.connectivityService ?? ConnectivityService();
     WidgetsBinding.instance.addObserver(this);
     _screenLoad = ScreenLoadReporter(widget.analytics, 'home');
     _catalogFuture = _loadCatalog();
@@ -137,6 +142,7 @@ class _ParkingMapPanelState extends State<ParkingMapPanel>
 
   Widget _fallback(BuildContext context) {
     _screenLoad?.presented(context, source: 'none', failed: true);
+    if (widget.fallbackBuilder != null) return widget.fallbackBuilder!(context);
     return Center(
       child: SingleChildScrollView(
         child: Padding(
