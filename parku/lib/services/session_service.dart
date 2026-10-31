@@ -421,17 +421,7 @@ class SessionService {
       return session;
     } catch (error) {
       if (!isConnectionError(error) || store == null) rethrow;
-      ParkingSession? session;
-      if (local != null && !kIsWeb) {
-        session = await local!.getActiveSession(owner);
-      } else {
-        final saved = await store?.read('active_session');
-        if (saved?['session'] != null) {
-          session = ParkingSession.fromMap(
-            saved!['session'] as Map<String, dynamic>,
-          );
-        }
-      }
+      final session = await getSavedActiveSession();
       _checkUser(owner);
       if (session == null) {
         throw const ConnectionFailure(
@@ -444,6 +434,29 @@ class SessionService {
       usingSavedSession = true;
       return session;
     }
+  }
+
+  /// A read-only preview for an offline card; never starts a server request.
+  Future<ParkingSession?> getSavedActiveSession() async {
+    if (currentUserId == null) return null;
+    final owner = _userId();
+    ParkingSession? session;
+    if (local != null && !kIsWeb) {
+      session = await local!.getActiveSession(owner);
+    } else {
+      final saved = await store?.read('active_session');
+      if (saved?['session'] != null) {
+        session = ParkingSession.fromMap(
+          saved!['session'] as Map<String, dynamic>,
+          isFromCache: true,
+        );
+      }
+    }
+    _checkUser(owner);
+    if (session?.userId != null && session!.userId != owner) {
+      throw const AuthException('Sign in to continue.');
+    }
+    return session;
   }
 
   Future<ParkingSession> changePickupTime({

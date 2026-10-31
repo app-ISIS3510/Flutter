@@ -8,7 +8,6 @@ import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import 'end_parking.dart';
 import '../controllers/navigation_controller.dart';
-import 'profile/profile_widgets.dart';
 import '../models/navigation_provider.dart';
 import '../widgets/external_navigation.dart';
 
@@ -134,6 +133,9 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final status =
+        widget.notice ??
+        (widget.session.isFromCache ? 'Last confirmed session' : null);
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -166,25 +168,30 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                       ],
                     ),
 
-                    if (widget.notice != null) ...[
-                      const SizedBox(height: 16),
-                      ProfileNotice(widget.notice!, onRetry: widget.onRefresh),
-                    ],
-
-                    const SizedBox(height: 30),
-
-                    if (widget.session.isFromCache) ...[
-                      const Text(
-                        'Saved confirmed session. Its current server status '
-                        'could not be checked. Session changes require a connection.',
-                        style: TextStyle(color: AppColors.greyText),
-                      ),
-                      if (widget.session.confirmedAt != null)
-                        Text(
-                          'Last confirmed: ${widget.session.confirmedAt!.toLocal().toString().split('.').first}',
-                        ),
+                    if (status != null) ...[
                       const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.info_outline_rounded,
+                            size: 17,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              status,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.greyText,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
+
+                    const SizedBox(height: 24),
 
                     const Center(
                       child: Text(

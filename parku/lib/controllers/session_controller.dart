@@ -19,10 +19,7 @@ class SessionController {
           'My parking before trying again.';
     }
 
-    return userErrorMessage(
-      error,
-      action: ErrorAction.startParking,
-    );
+    return userErrorMessage(error, action: ErrorAction.startParking);
   }
 
   final SessionService service;
@@ -40,9 +37,7 @@ class SessionController {
 
   void _checkUser(String? userId) {
     if (service.currentUserId != userId) {
-      throw const AuthException(
-        'The signed-in account changed.',
-      );
+      throw const AuthException('The signed-in account changed.');
     }
   }
 
@@ -145,6 +140,9 @@ class SessionController {
     return request;
   }
 
+  Future<ParkingSession?> loadSavedActiveSession() =>
+      service.getSavedActiveSession();
+
   Future<ParkingSession?> _loadActiveSession(
     int version,
     String? userId,
@@ -155,8 +153,7 @@ class SessionController {
     if (version == _version && _busyVersion == null) {
       sessionState.setActiveSession(
         session,
-        isFromCache:
-            service.lastReadFromCache || service.usingSavedSession,
+        isFromCache: service.lastReadFromCache || service.usingSavedSession,
       );
     }
 
@@ -182,10 +179,7 @@ class SessionController {
     String parkingName = 'Parking stay',
   }) {
     return _change(
-      () => service.endParking(
-        sessionId: sessionId,
-        parkingName: parkingName,
-      ),
+      () => service.endParking(sessionId: sessionId, parkingName: parkingName),
     );
   }
 
