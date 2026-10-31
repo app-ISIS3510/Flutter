@@ -144,6 +144,13 @@ void main() {
   );
 
   test('saving a choice does not wait for the network and concurrent flushes share work', () async {
+    // The gate proves non-blocking behavior; disk I/O under a parallel suite
+    // must not race the 100 ms timeout used by the other fixtures.
+    analytics = PickupAnalyticsService(
+      remote,
+      store,
+      timeout: const Duration(seconds: 5),
+    );
     remote.gate = Completer<void>();
     await analytics.saveChoice(session('session-1'), choice());
     await remote.received.future;
@@ -177,6 +184,11 @@ void main() {
   test(
     'the new account sends its queue after an earlier account finishes sending',
     () async {
+      analytics = PickupAnalyticsService(
+        remote,
+        store,
+        timeout: const Duration(seconds: 5),
+      );
       remote.gate = Completer<void>();
       await analytics.saveChoice(session('session-1'), choice());
       await remote.received.future;
