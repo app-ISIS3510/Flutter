@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../controllers/analytics_controller.dart';
 import '../controllers/parking_controller.dart';
 import '../models/most_used_parking.dart';
+import '../models/most_used_parking_ranking.dart';
 import '../models/parking.dart';
 import '../models/smart_parking_result.dart';
 import '../services/connectivity_service.dart';
@@ -50,7 +51,7 @@ class _ParkingListScreenState extends State<ParkingListScreen>
 
   late Stream<ParkingListState> _parkingStream;
   late Future<SmartParkingResults> _resultsFuture;
-  late Future<List<MostUsedParking>> _mostUsedFuture;
+  late Future<MostUsedParkingRanking> _mostUsedFuture;
 
   bool? _hasNetwork;
   bool _catalogRefreshing = true;
@@ -69,7 +70,7 @@ class _ParkingListScreenState extends State<ParkingListScreen>
     WidgetsBinding.instance.addObserver(this);
     _parkingStream = _createParkingStream();
     _loadResults();
-    _mostUsedFuture = widget.controller.loadMostUsedParkingLots();
+    _loadMostUsed();
 
     _subscription = _connectivity.onNetworkChanged.listen(
       _onNetworkChanged,
@@ -167,7 +168,7 @@ class _ParkingListScreenState extends State<ParkingListScreen>
     if (oldWidget.controller != widget.controller) {
       _parkingStream = _createParkingStream();
       _loadResults();
-      _mostUsedFuture = widget.controller.loadMostUsedParkingLots();
+      _loadMostUsed();
     }
   }
 
@@ -251,13 +252,18 @@ class _ParkingListScreenState extends State<ParkingListScreen>
     });
   }
 
+  void _loadMostUsed() {
+    _mostUsedFuture = widget.controller.loadMostUsedParkingRanking();
+    unawaited(_mostUsedFuture.then<void>((_) {}, onError: (Object _) {}));
+  }
+
   void _refreshLocation() {
     if (!mounted || _catalogRefreshing || _smartLoading) return;
 
     setState(() {
       _parkingStream = _createParkingStream(trigger: 'refresh');
       _loadResults();
-      _mostUsedFuture = widget.controller.loadMostUsedParkingLots();
+      _loadMostUsed();
     });
   }
 
@@ -265,7 +271,7 @@ class _ParkingListScreenState extends State<ParkingListScreen>
     if (!mounted) return;
 
     setState(() {
-      _mostUsedFuture = widget.controller.loadMostUsedParkingLots();
+      _loadMostUsed();
     });
   }
 
@@ -277,17 +283,20 @@ class _ParkingListScreenState extends State<ParkingListScreen>
     setState(() => _openingParkingId = selected.parkingId);
 
     try {
-      final parking = await widget.controller
-          .loadParkingById(selected.parkingId)
-          .timeout(const Duration(seconds: 8));
+      final details = await widget.controller.loadParkingDetails(
+        selected.parkingId,
+      );
 
       if (!mounted) return;
 
+      final parking = details.parking;
       if (parking == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'This parking lot is no longer available. Refresh the ranking.',
+              details.errorMessage == 'Parking lot not found.'
+                  ? 'This parking lot is no longer available. Refresh the ranking.'
+                  : 'Could not open this parking lot. Please try again later.',
             ),
           ),
         );

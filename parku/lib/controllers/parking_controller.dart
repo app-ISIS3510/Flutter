@@ -1,5 +1,6 @@
 import '../models/parking.dart';
 import '../models/most_used_parking.dart';
+import '../models/most_used_parking_ranking.dart';
 import '../models/parking_catalog_snapshot.dart';
 import '../models/parking_option.dart';
 import '../models/smart_parking_result.dart';
@@ -21,6 +22,10 @@ class ParkingController {
 
   Future<List<MostUsedParking>> loadMostUsedParkingLots() {
     return service.getMostUsedParkingLots();
+  }
+
+  Future<MostUsedParkingRanking> loadMostUsedParkingRanking() {
+    return service.getMostUsedParkingRanking();
   }
 
   Future<List<Parking>> loadParkingLots() {

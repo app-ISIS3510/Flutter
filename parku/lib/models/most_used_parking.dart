@@ -10,10 +10,27 @@ class MostUsedParking {
   });
 
   factory MostUsedParking.fromMap(Map<String, dynamic> map) {
+    final sessions = map['completed_sessions'];
+    if (map['parking_id'] is! String ||
+        (map['parking_id'] as String).trim().isEmpty ||
+        map['parking_name'] is! String ||
+        (map['parking_name'] as String).trim().isEmpty ||
+        sessions is! num ||
+        !sessions.isFinite ||
+        sessions < 0 ||
+        sessions != sessions.toInt()) {
+      throw const FormatException('Invalid parking ranking.');
+    }
     return MostUsedParking(
       parkingId: map['parking_id'] as String,
       parkingName: map['parking_name'] as String,
-      completedSessions: (map['completed_sessions'] as num).toInt(),
+      completedSessions: sessions.toInt(),
     );
   }
+
+  Map<String, dynamic> toMap() => {
+    'parking_id': parkingId,
+    'parking_name': parkingName,
+    'completed_sessions': completedSessions,
+  };
 }

@@ -212,7 +212,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
     parkingRepository = ParkingRepository(supabase);
     distanceManager = DistanceManager();
-    parkingService = ParkingService(parkingRepository, distanceManager);
+    parkingService = ParkingService(
+      parkingRepository,
+      distanceManager,
+      store:
+          widget.sessionService?.store ??
+          widget.profileService?.store ??
+          localStore,
+    );
     parkingController = ParkingController(parkingService);
 
     sessionRepository = SessionRepository(supabase);
