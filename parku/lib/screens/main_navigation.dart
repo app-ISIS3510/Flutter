@@ -802,13 +802,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
                             _refreshFavorites();
 
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Favorite saved. It will sync when online.',
-                                ),
-                              ),
-                            );
+                            // The heart already confirms an online change.
+                            // Explain the local save only when actually offline.
+                            final online = await _connection.connectionStatus();
+                            if (online == false &&
+                                context.mounted &&
+                                detailIsOpen &&
+                                detailUserId == _userId) {
+                              showUserInfo(
+                                context,
+                                'Saved on this device. Syncs when online.',
+                              );
+                            }
                           } catch (error) {
                             if (!context.mounted ||
                                 !detailIsOpen ||
@@ -1288,19 +1293,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             final saved = snapshot.data;
             final favorites = saved?.favorites ?? [];
 
-            final storageNotice = [
-              if (saved?.isFromCache == true)
-                'Showing saved favorites. They may be incomplete or outdated.',
-              if ((saved?.pendingCount ?? 0) > 0)
-                '${saved!.pendingCount} change(s) saved on this device and waiting to sync.',
-              if (saved?.updatedAt != null)
-                'Last server update: ${saved!.updatedAt!.toLocal().toString().split('.').first}',
-            ].join('\n');
+            final storageNotice = (saved?.pendingCount ?? 0) > 0
+                ? 'Changes sync when online.'
+                : saved?.isFromCache == true
+                ? 'Saved favorites'
+                : null;
 
             if (favorites.isEmpty) {
               return NoFavoritesScreen(
                 onNavTap: changePage,
-                storageNotice: storageNotice.isEmpty ? null : storageNotice,
+                storageNotice: storageNotice,
                 onRefresh: _refreshFavorites,
               );
             }
@@ -1308,7 +1310,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             return FavoritesScreen(
               favorites: favorites,
               pendingRemovalIds: Set.unmodifiable(_removingFavoriteIds),
-              storageNotice: storageNotice.isEmpty ? null : storageNotice,
+              storageNotice: storageNotice,
               onRefresh: _refreshFavorites,
               onNavTap: changePage,
               onSelectParking: openParkingDetail,

@@ -5,6 +5,7 @@ import '../theme/app_theme.dart';
 import '../widgets/design_icon.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/pickup_widgets.dart';
+import '../widgets/favorites_header.dart';
 
 class FavoritesScreen extends StatelessWidget {
   final List<Parking> favorites;
@@ -53,13 +54,7 @@ class FavoritesScreen extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
                 children: [
-                  const ScreenHeader(title: 'Favorites'),
-                  if (storageNotice != null) Text(storageNotice!),
-                  if (onRefresh != null)
-                    TextButton(
-                      onPressed: onRefresh,
-                      child: const Text('Refresh favorites'),
-                    ),
+                  FavoritesHeader(notice: storageNotice, onRefresh: onRefresh),
 
                   const SizedBox(height: 33),
 
