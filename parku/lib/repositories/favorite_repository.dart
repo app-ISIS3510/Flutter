@@ -67,8 +67,7 @@ class FavoriteRepository {
                 Parking.fromMap(item['parking_lots'] as Map<String, dynamic>),
           )
           .toList();
-      // Cache real availability rows, rather than treating a base-table
-      // capacity as a current availability estimate.
+      // Read available spaces instead of using the total capacity.
       if (favorites.isNotEmpty) {
         try {
           final details = await client

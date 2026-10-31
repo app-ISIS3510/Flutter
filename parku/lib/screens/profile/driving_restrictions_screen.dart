@@ -71,7 +71,7 @@ class _DrivingRestrictionsScreenState extends State<DrivingRestrictionsScreen>
         return;
       }
     } catch (_) {
-      /* Se muestra el mismo mensaje si no hay navegador disponible. */
+      // Use the message below if the browser cannot open.
     }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

@@ -390,7 +390,6 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
 
                     const SizedBox(height: 16),
 
-                    // CHANGE PICKUP TIME
                     SizedBox(
                       width: double.infinity,
                       height: 58,
@@ -416,7 +415,6 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
 
                     const SizedBox(height: 14),
 
-                    // END PARKING
                     SizedBox(
                       width: double.infinity,
                       height: 58,

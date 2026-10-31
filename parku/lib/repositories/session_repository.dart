@@ -292,8 +292,7 @@ class SessionRepository {
     );
   }
 
-  // También se usa dentro de una mutación ya serializada:
-  // no debe volver a entrar en _operations.
+  // Calling _operations again here would make the queue wait on itself.
   Future<ParkingSession?> _fetchSessionById(
     String id,
     String userId,
