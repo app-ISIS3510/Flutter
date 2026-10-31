@@ -4,15 +4,20 @@ import 'dart:developer' as developer;
 import 'package:geolocator/geolocator.dart';
 
 import '../models/most_used_parking.dart';
+import '../models/most_used_parking_ranking.dart';
 import '../models/parking.dart';
 import '../models/parking_catalog_snapshot.dart';
 import '../models/parking_option.dart';
 import '../models/smart_parking_result.dart';
 import '../models/vehicle.dart';
 import '../repositories/parking_repository.dart';
+import '../repositories/user_local_store.dart';
 import '../state/nearby_parking_state.dart';
 import '../state/parking_detail_state.dart';
 import '../state/parking_list_state.dart';
+import '../utils/async_operations.dart';
+import '../utils/error_messages.dart';
+import 'connection_failure.dart';
 import 'connectivity_service.dart';
 import 'distance_manager.dart';
 import 'smart_parking_processor.dart';
@@ -24,12 +29,16 @@ class ParkingService {
   final ParkingRepository repository;
   final DistanceManager distanceManager;
   final ConnectivityService connectivityService;
+  final UserLocalStore store;
+  final _rankingReads = SingleFlight<String, MostUsedParkingRanking>();
 
   ParkingService(
     this.repository,
     this.distanceManager, {
     ConnectivityService? connectivityService,
-  }) : connectivityService = connectivityService ?? ConnectivityService();
+    UserLocalStore? store,
+  }) : connectivityService = connectivityService ?? ConnectivityService(),
+       store = store ?? UserLocalStore(repository.client);
 
   Stream<ParkingListState> watchParkingLots() async* {
     yield const ParkingListState(isRefreshing: true);
@@ -102,6 +111,48 @@ class ParkingService {
     return repository.getMostUsedParkingLots().timeout(
       const Duration(seconds: 8),
     );
+  }
+
+  Future<MostUsedParkingRanking> getMostUsedParkingRanking() async {
+    final owner = store.userId;
+    return _rankingReads.run(owner, () => _loadMostUsedParkingRanking(owner));
+  }
+
+  Future<MostUsedParkingRanking> _loadMostUsedParkingRanking(
+    String owner,
+  ) async {
+    try {
+      await connectivityService.requireConnection();
+      store.checkUser(owner);
+      final parkingLots = await getMostUsedParkingLots();
+      store.checkUser(owner);
+      final ranking = MostUsedParkingRanking(
+        parkingLots: parkingLots,
+        updatedAt: DateTime.now().toUtc(),
+      );
+      try {
+        await store.write('most_used_parking_ranking', ranking.toMap());
+      } catch (error, stackTrace) {
+        store.checkUser(owner);
+        developer.log(
+          'Could not save parking ranking',
+          name: 'ParkingService',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+      store.checkUser(owner);
+      return ranking;
+    } catch (error) {
+      store.checkUser(owner);
+      if (error is! OfflineActionException && !isConnectionError(error)) {
+        rethrow;
+      }
+      final saved = await store.read('most_used_parking_ranking');
+      store.checkUser(owner);
+      if (saved == null) rethrow;
+      return MostUsedParkingRanking.fromMap(saved);
+    }
   }
 
   Future<List<Parking>> getParkingLots() {

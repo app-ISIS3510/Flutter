@@ -8,29 +8,38 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:parku/controllers/parking_controller.dart';
 import 'package:parku/repositories/parking_repository.dart';
+import 'package:parku/repositories/user_local_store.dart';
 import 'package:parku/screens/parking_list.dart';
 import 'package:parku/services/distance_manager.dart';
 import 'package:parku/services/parking_service.dart';
 import 'package:parku/widgets/parking_card.dart';
+import 'package:parku/widgets/most_used_parking_section.dart';
+import 'package:parku/widgets/offline_data_status_indicator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:parku/models/parking.dart';
 import 'package:parku/data/local/parking_local_data_source.dart';
 import 'package:parku/services/connectivity_service.dart';
 
 import 'support/parking_fakes.dart';
+import 'support/memory_auth_storage.dart';
+import 'support/offline_fakes.dart' show signInAs;
 
 class TestConnectivityService extends ConnectivityService {
-  @override
-  Future<bool> hasNetworkConnection() async => true;
+  bool online = true;
 
   @override
-  Future<bool?> connectionStatus() async => true;
+  Future<bool> hasNetworkConnection() async => online;
+
+  @override
+  Future<bool?> connectionStatus() async => online;
 
   @override
   Stream<bool> get onNetworkChanged => const Stream<bool>.empty();
 }
 
 class TestParkingLocalDataSource extends ParkingLocalDataSource {
+  CachedParking? parking;
+
   @override
   Future<CachedParkingList?> readParkingLots() async => null;
 
@@ -44,7 +53,8 @@ class TestParkingLocalDataSource extends ParkingLocalDataSource {
   Future<void> saveParking(Parking parking) async {}
 
   @override
-  Future<CachedParking?> readParkingById(String id) async => null;
+  Future<CachedParking?> readParkingById(String id) async =>
+      parking?.parking.id == id ? parking : null;
 }
 
 void main() {
@@ -52,6 +62,9 @@ void main() {
   late FakeLocationPlatform location;
   late SupabaseClient client;
   late ParkingController controller;
+  late UserLocalStore store;
+  late TestConnectivityService connectivity;
+  late TestParkingLocalDataSource localData;
   late List<Map<String, dynamic>> ranking;
   late List<Map<String, dynamic>> lots;
   var rankingCalls = 0;
@@ -64,7 +77,7 @@ void main() {
   Completer<void>? detailGate;
   Map<String, String>? selected;
 
-  setUp(() {
+  setUp(() async {
     original = GeolocatorPlatform.instance;
     location = FakeLocationPlatform();
     GeolocatorPlatform.instance = location;
@@ -91,7 +104,10 @@ void main() {
     client = SupabaseClient(
       'https://test.invalid',
       'test-key',
-      authOptions: const AuthClientOptions(autoRefreshToken: false),
+      authOptions: AuthClientOptions(
+        autoRefreshToken: false,
+        pkceAsyncStorage: MemoryAuthStorage(),
+      ),
       httpClient: MockClient((request) async {
         Object? body;
         if (request.url.path ==
@@ -125,14 +141,20 @@ void main() {
         );
       }),
     );
+    await signInAs(client, 'ranking-user');
+    store = UserLocalStore.memory(client);
+    connectivity = TestConnectivityService();
+    localData = TestParkingLocalDataSource();
     controller = ParkingController(
       ParkingService(
         ParkingRepository(
           client,
-          localDataSource: TestParkingLocalDataSource(),
+          localDataSource: localData,
+          connectivityService: connectivity,
         ),
         DistanceManager(),
-        connectivityService: TestConnectivityService(),
+        connectivityService: connectivity,
+        store: store,
       ),
     );
   });
@@ -304,9 +326,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(selected, isNull);
       expect(
-        find.text(
-          'Could not open this parking lot. Please try again later.',
-        ),
+        find.text('Could not open this parking lot. Please try again later.'),
         findsOneWidget,
       );
       detailFails = false;
@@ -357,7 +377,180 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('saved ranking shows its date and opens cached parking details', (
+    tester,
+  ) async {
+    final live = await controller.loadMostUsedParkingRanking();
+    connectivity.online = false;
+    localData.parking = CachedParking(
+      parking: Parking.fromMap(lots.first),
+      cachedAt: live.updatedAt,
+    );
+    await openList(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('Most used parking lots (saved)'), findsOneWidget);
+    expect(find.text('Saved ranking'), findsOneWidget);
+    expect(
+      find.text('Top 3 in the 7 days before the last update.'),
+      findsOneWidget,
+    );
+    final status = tester.widget<OfflineDataStatusIndicator>(
+      find.descendant(
+        of: find.byType(MostUsedParkingSection),
+        matching: find.byType(OfflineDataStatusIndicator),
+      ),
+    );
+    expect(status.updatedAt, live.updatedAt);
+    expect(rankingCalls, 1);
+    await scrollTo(tester, find.text('8 completed sessions'), 200);
+    await tester.tap(find.text('8 completed sessions'));
+    await tester.pumpAndSettle();
+    expect(selected?['id'], 'popular');
+    expect(detailCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'offline refresh keeps the saved result and reconnect replaces it',
+    (tester) async {
+      final live = await controller.loadMostUsedParkingRanking();
+      connectivity.online = false;
+      await openList(tester);
+      await tester.pumpAndSettle();
+      await scrollTo(tester, find.text('Refresh ranking'), 200);
+      await tester.tap(find.text('Refresh ranking'));
+      await tester.pumpAndSettle();
+      expect(find.text('8 completed sessions'), findsOneWidget);
+      expect(find.text('Saved ranking'), findsOneWidget);
+      expect(rankingCalls, 1);
+      expect(
+        (await store.read('most_used_parking_ranking'))!['updated_at'],
+        live.updatedAt.toIso8601String(),
+      );
+      connectivity.online = true;
+      ranking[0]['completed_sessions'] = 12;
+      await tester.tap(find.text('Refresh ranking'));
+      await tester.pumpAndSettle();
+      expect(find.text('12 completed sessions'), findsOneWidget);
+      expect(find.text('Saved ranking'), findsNothing);
+      expect(find.text('Most used parking lots this week'), findsOneWidget);
+      expect(rankingCalls, 2);
+    },
+  );
+
+  testWidgets('a cached empty week refers to the saved period', (tester) async {
+    ranking = [];
+    await controller.loadMostUsedParkingRanking();
+    connectivity.online = false;
+    await openList(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('Saved ranking'), findsOneWidget);
+    expect(
+      find.text(
+        'No completed parking sessions were recorded in the saved period.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'No completed parking sessions were recorded in the last 7 days.',
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a stalled parking detail request can still open saved details', (
+    tester,
+  ) async {
+    localData.parking = CachedParking(
+      parking: Parking.fromMap(lots.first),
+      cachedAt: DateTime.now().toUtc(),
+    );
+    detailGate = Completer<void>();
+    await openList(tester);
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('8 completed sessions'), 200);
+    await tester.tap(find.text('8 completed sessions'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 16));
+    await tester.pumpAndSettle();
+    expect(selected?['id'], 'popular');
+    expect(detailCalls, 1);
+    detailGate!.complete();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a saved ranking with no saved details offers clear feedback', (
+    tester,
+  ) async {
+    await controller.loadMostUsedParkingRanking();
+    connectivity.online = false;
+    await openList(tester);
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text('8 completed sessions'), 200);
+    await tester.tap(find.text('8 completed sessions'));
+    await tester.pumpAndSettle();
+    expect(selected, isNull);
+    expect(
+      find.text('Could not open this parking lot. Please try again later.'),
+      findsOneWidget,
+    );
+    expect(detailCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a timed-out refresh uses cache and ignores its late response', (
+    tester,
+  ) async {
+    final live = await controller.loadMostUsedParkingRanking();
+    rankingGate = Completer<void>();
+    ranking[0]['completed_sessions'] = 20;
+    await openList(tester);
+    await tester.pump(const Duration(seconds: 9));
+    await tester.pumpAndSettle();
+    expect(find.text('Saved ranking'), findsOneWidget);
+    expect(find.text('8 completed sessions'), findsOneWidget);
+    rankingGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('20 completed sessions'), findsNothing);
+    final saved = (await store.read('most_used_parking_ranking'))!;
+    expect(saved['updated_at'], live.updatedAt.toIso8601String());
+    expect((saved['parking_lots'] as List).single['completed_sessions'], 8);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('an offline first visit can recover using the ranking retry', (
+    tester,
+  ) async {
+    connectivity.online = false;
+    await openList(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('Retry ranking'), findsOneWidget);
+    expect(find.text('Saved ranking'), findsNothing);
+    connectivity.online = true;
+    await scrollTo(tester, find.text('Retry ranking'), 200);
+    await tester.tap(find.text('Retry ranking'));
+    await tester.pumpAndSettle();
+    expect(find.text('8 completed sessions'), findsOneWidget);
+    expect(find.text('Retry ranking'), findsNothing);
+  });
+
   for (final size in [const Size(320, 568), const Size(844, 390)]) {
+    testWidgets('the saved ranking notice fits on a $size phone', (
+      tester,
+    ) async {
+      await controller.loadMostUsedParkingRanking();
+      connectivity.online = false;
+      await openList(tester, size: size, textScale: 1.5);
+      await tester.pumpAndSettle();
+      expect(find.text('Saved ranking'), findsOneWidget);
+      await scrollTo(tester, find.text('Refresh ranking'), 200);
+      expect(find.text('Refresh ranking').hitTestable(), findsOneWidget);
+      expect(find.text('Profile').hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('three ranked lots fit and scroll on a $size phone', (
       tester,
     ) async {

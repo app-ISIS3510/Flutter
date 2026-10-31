@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../models/most_used_parking.dart';
+import '../models/most_used_parking_ranking.dart';
 import '../theme/app_theme.dart';
+import 'offline_data_status_indicator.dart';
 
 class MostUsedParkingSection extends StatelessWidget {
-  final Future<List<MostUsedParking>> future;
+  final Future<MostUsedParkingRanking> future;
   final VoidCallback onRetry;
   final ValueChanged<MostUsedParking>? onSelectParking;
   final String? openingParkingId;
@@ -21,72 +23,77 @@ class MostUsedParkingSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Most used parking lots this week',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: AppColors.darkText,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Top 3 by completed sessions in the last 7 days.',
-            style: TextStyle(fontSize: 13, color: AppColors.greyText),
-          ),
-          const SizedBox(height: 12),
-          FutureBuilder<List<MostUsedParking>>(
-            future: future,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Padding(
+      child: FutureBuilder<MostUsedParkingRanking>(
+        future: future,
+        builder: (context, snapshot) {
+          final loading = snapshot.connectionState == ConnectionState.waiting;
+          final ranking = loading || snapshot.hasError ? null : snapshot.data;
+          final saved = ranking?.isFromCache ?? false;
+          final items = ranking?.parkingLots ?? [];
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                saved
+                    ? 'Most used parking lots (saved)'
+                    : 'Most used parking lots this week',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.darkText,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                saved
+                    ? 'Top 3 in the 7 days before the last update.'
+                    : 'Top 3 by completed sessions in the last 7 days.',
+                style: const TextStyle(fontSize: 13, color: AppColors.greyText),
+              ),
+              const SizedBox(height: 12),
+              if (loading)
+                const Padding(
                   padding: EdgeInsets.all(16),
                   child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              if (snapshot.hasError) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Could not load this ranking. Check your connection and retry.',
-                      style: TextStyle(fontSize: 13, color: AppColors.greyText),
-                    ),
-                    TextButton(
-                      onPressed: onRetry,
-                      child: const Text('Retry ranking'),
-                    ),
-                  ],
-                );
-              }
-              final items = snapshot.data ?? [];
-              if (items.isEmpty) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'No completed parking sessions were recorded in the last 7 days.',
-                      style: TextStyle(fontSize: 13, color: AppColors.greyText),
-                    ),
-                    _refreshButton(),
-                  ],
-                );
-              }
-              return Column(
-                children: [
-                  for (var index = 0; index < items.length; index++) ...[
-                    if (index > 0) const SizedBox(height: 10),
-                    _parkingTile(items[index], index + 1),
-                  ],
-                  _refreshButton(),
+                )
+              else if (snapshot.hasError) ...[
+                const Text(
+                  'Could not load this ranking. Check your connection and retry.',
+                  style: TextStyle(fontSize: 13, color: AppColors.greyText),
+                ),
+                TextButton(
+                  onPressed: onRetry,
+                  child: const Text('Retry ranking'),
+                ),
+              ] else ...[
+                if (saved) ...[
+                  OfflineDataStatusIndicator(
+                    isFromCache: true,
+                    updatedAt: ranking!.updatedAt,
+                    title: 'Saved ranking',
+                    description: 'Could not refresh this ranking. These results may have changed.',
+                  ),
+                  const SizedBox(height: 12),
                 ],
-              );
-            },
-          ),
-        ],
+                if (items.isEmpty)
+                  Text(
+                    saved
+                        ? 'No completed parking sessions were recorded in the saved period.'
+                        : 'No completed parking sessions were recorded in the last 7 days.',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.greyText,
+                    ),
+                  ),
+                for (var index = 0; index < items.length; index++) ...[
+                  if (index > 0) const SizedBox(height: 10),
+                  _parkingTile(items[index], index + 1),
+                ],
+                _refreshButton(),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
