@@ -545,10 +545,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
     unawaited(
       sessionService
-          .savePickupDraft(
-            key,
-            {'time': time, 'vehicle_id': vehicleId},
-          )
+          .savePickupDraft(key, {'time': time, 'vehicle_id': vehicleId})
           .catchError((Object _) {
             if (_sameUser(owner)) {
               showUserMessage(
@@ -646,6 +643,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
               onSelectParking: openParkingDetail,
               onNavTap: _profileNavTap,
               onSearch: (query) {
+                if (query.trim().isNotEmpty) {
+                  unawaited(
+                    analyticsController
+                        .track(
+                          eventType: 'parking_search_performed',
+                          screen: 'search',
+                          metadata: {
+                            'search_method': 'text',
+                            'platform': 'flutter',
+                          },
+                        )
+                        .catchError((Object _) {}),
+                  );
+                }
+
                 Navigator.push<void>(
                   context,
                   MaterialPageRoute<void>(
@@ -840,16 +852,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                       'id': selectedParking.id,
                       'name': selectedParking.name,
                       'address': selectedParking.address,
-                      'latitude':
-                          selectedParking.latitude?.toString() ?? '',
-                      'longitude':
-                          selectedParking.longitude?.toString() ?? '',
-                      'carSpaces':
-                          selectedParking.availableCarSpaces.toString(),
-                      'motorcycleSpaces':
-                          selectedParking.availableMotorcycleSpaces.toString(),
-                      'pricePerMinute':
-                          selectedParking.pricePerMinute.toString(),
+                      'latitude': selectedParking.latitude?.toString() ?? '',
+                      'longitude': selectedParking.longitude?.toString() ?? '',
+                      'carSpaces': selectedParking.availableCarSpaces
+                          .toString(),
+                      'motorcycleSpaces': selectedParking
+                          .availableMotorcycleSpaces
+                          .toString(),
+                      'pricePerMinute': selectedParking.pricePerMinute
+                          .toString(),
                       'openingTime': selectedParking.openingTime ?? '',
                       'closingTime': selectedParking.closingTime ?? '',
                       'imageUrl': selectedParking.imageUrl ?? '',
@@ -1055,9 +1066,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         );
       }
 
-      final draft = await sessionService.getPickupDraft(
-        'change_${session.id}',
-      );
+      final draft = await sessionService.getPickupDraft('change_${session.id}');
 
       if (!_sameUser(owner)) return;
 
@@ -1083,10 +1092,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             onSave: (time) async {
               _requireUser(owner);
 
-              await sessionService.savePickupDraft(
-                'change_${session.id}',
-                {'time': time},
-              );
+              await sessionService.savePickupDraft('change_${session.id}', {
+                'time': time,
+              });
 
               _requireUser(owner);
               await _connection.requireConnection();
@@ -1114,9 +1122,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                 eventType: 'pickup_time_changed',
                 screen: 'change_pickup_time',
                 parkingId: session.parkingId,
-                metadata: {
-                  'new_pickup_time': pickup.toIso8601String(),
-                },
+                metadata: {'new_pickup_time': pickup.toIso8601String()},
               );
             },
           ),
@@ -1177,10 +1183,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     if (!_sameUser(owner)) return;
 
     _myParkingLoad?.cancel();
-    _myParkingLoad = ScreenLoadReporter(
-      analyticsController,
-      'my_parking',
-    );
+    _myParkingLoad = ScreenLoadReporter(analyticsController, 'my_parking');
 
     final version = ++_myParkingRequestVersion;
 
@@ -1228,11 +1231,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         final parking = details?.parking;
 
         if (snapshot.hasError || parking == null) {
-          _myParkingLoad?.presented(
-            context,
-            source: 'none',
-            failed: true,
-          );
+          _myParkingLoad?.presented(context, source: 'none', failed: true);
 
           return _loadFailure(
             'Could not load parking details. Please try again later.',
@@ -1254,10 +1253,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           session: session,
           parking: parking,
           navigationController: navigationController,
-          onEndParking: () => endParking(
-            session: session,
-            parkingName: parking.name,
-          ),
+          onEndParking: () =>
+              endParking(session: session, parkingName: parking.name),
           notice:
               sessionService.notice ??
               (details.isFromCache ? 'Using saved parking details.' : null),
@@ -1273,12 +1270,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     switch (currentIndex) {
       case 1:
         return ParkingListScreen(
-          analytics: analyticsController,
           currentIndex: currentIndex,
           onNavTap: changePage,
           controller: parkingController,
           onSelectParking: openParkingDetail,
           onSearchTap: openSearch,
+          analytics: analyticsController,
         );
 
       case 2:
@@ -1318,9 +1315,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             if (favorites.isEmpty) {
               return NoFavoritesScreen(
                 onNavTap: changePage,
-                storageNotice: storageNotice.isEmpty
-                    ? null
-                    : storageNotice,
+                storageNotice: storageNotice.isEmpty ? null : storageNotice,
                 onRefresh: _refreshFavorites,
               );
             }
@@ -1328,9 +1323,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             return FavoritesScreen(
               favorites: favorites,
               pendingRemovalIds: Set.unmodifiable(_removingFavoriteIds),
-              storageNotice: storageNotice.isEmpty
-                  ? null
-                  : storageNotice,
+              storageNotice: storageNotice.isEmpty ? null : storageNotice,
               onRefresh: _refreshFavorites,
               onNavTap: changePage,
               onSelectParking: openParkingDetail,
@@ -1363,11 +1356,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         }
 
         if (_sessionLoadError != null) {
-          _myParkingLoad?.presented(
-            context,
-            source: 'none',
-            failed: true,
-          );
+          _myParkingLoad?.presented(context, source: 'none', failed: true);
 
           return _loadFailure(
             _sessionLoadError!,
@@ -1382,11 +1371,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             final session = sessionState.activeSession;
 
             if (session == null && sessionService.pendingRequest != null) {
-              _myParkingLoad?.presented(
-                context,
-                source: 'none',
-                failed: true,
-              );
+              _myParkingLoad?.presented(context, source: 'none', failed: true);
 
               return _loadFailure(
                 sessionService.notice ??
