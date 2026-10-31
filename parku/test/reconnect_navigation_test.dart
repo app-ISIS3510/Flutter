@@ -121,8 +121,7 @@ void main() {
       expect(tester.takeException(), isNull);
 
       await tester.pumpWidget(const SizedBox());
-      // Reconnect starts bounded connection checks independently of widget
-      // animations. Let their timeout futures finish after disposal too.
+      // Let pending connection timeouts finish after closing the screen.
       await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();
       expect(events.hasListener, isFalse);

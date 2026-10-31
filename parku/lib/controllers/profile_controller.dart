@@ -91,7 +91,7 @@ class ProfileController extends ChangeNotifier {
       try {
         adminStatus = await service.isAdmin();
       } catch (error, stackTrace) {
-        // Optional admin access must not prevent loading vehicles/profile.
+        // Load the profile even if the admin check fails.
         developer.log(
           'Could not verify dashboard access',
           error: error,

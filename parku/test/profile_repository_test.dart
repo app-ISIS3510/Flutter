@@ -91,7 +91,7 @@ void main() {
           ),
         )
         .replaceAll('=', '');
-    // Sesión sintética para el cliente HTTP simulado; no sirve en Supabase real.
+    // This session only works with the fake server in this test.
     await client.auth.setInitialSession(
       jsonEncode({
         'access_token': 'eyJhbGciOiJIUzI1NiJ9.$payload.test',

@@ -436,7 +436,7 @@ class SessionService {
     }
   }
 
-  /// A read-only preview for an offline card; never starts a server request.
+  /// Read the saved session without contacting the server.
   Future<ParkingSession?> getSavedActiveSession() async {
     if (currentUserId == null) return null;
     final owner = _userId();

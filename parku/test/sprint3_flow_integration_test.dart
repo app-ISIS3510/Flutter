@@ -42,8 +42,7 @@ class FlowHistory extends SessionHistoryRepository {
 }
 
 Future<void> waitForScreen(WidgetTester tester, Finder screen) async {
-  // pumpAndSettle can finish while a connection check is still waiting: this
-  // screen shows a static loading label rather than an animated progress bar.
+  // A static loading label can stop pumpAndSettle before the request finishes.
   for (var i = 0; i < 300 && screen.evaluate().isEmpty; i++) {
     await tester.pump(const Duration(milliseconds: 100));
   }
@@ -247,7 +246,6 @@ void main() {
         expect(choice['metadata']['pickup_selection'], 'suggested');
         expect(choice['metadata']['session_id'], 'session-1');
 
-        // Offline changes are rejected from My parking before session reads.
         const channel = MethodChannel('dev.fluttercommunity.plus/connectivity');
         tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
           channel,

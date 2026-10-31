@@ -16,7 +16,7 @@ class DrivingRestriction {
 class DrivingRestrictionService {
   static const officialUrl = 'https://www.movilidadbogota.gov.co/pico-y-placa';
 
-  // Calendario 2026. Mantener al día con la Secretaría de Movilidad.
+  // Holidays for 2026; update this list each year.
   static const holidays2026 = {
     '01-01',
     '01-12',
@@ -39,7 +39,7 @@ class DrivingRestrictionService {
   };
 
   DrivingRestriction check(Vehicle vehicle, {DateTime? now}) {
-    // Bogotá usa UTC-5 todo el año; no depende de la zona del teléfono.
+    // Use Bogotá time even if the phone is in another time zone.
     final local = (now ?? DateTime.now()).toUtc().subtract(
       const Duration(hours: 5),
     );
@@ -53,7 +53,7 @@ class DrivingRestrictionService {
     }
     final dayKey =
         '${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-    // Día sin carro y sin moto de 2026.
+    // Car-free and motorcycle-free day in 2026.
     if (dayKey == '02-05') {
       return DrivingRestriction(
         date: date,

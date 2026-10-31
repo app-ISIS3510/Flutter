@@ -3,7 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme/app_theme.dart';
 
-// Los archivos son los iconos exportados del Figma del equipo.
+// Icons exported from our Figma design.
 class DesignIcon extends StatelessWidget {
   final String name;
   final double size;

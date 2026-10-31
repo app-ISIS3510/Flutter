@@ -825,8 +825,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
                             _refreshFavorites();
 
-                            // The heart already confirms an online change.
-                            // Explain the local save only when actually offline.
                             final online = await _connection.connectionStatus();
                             if (online == false &&
                                 context.mounted &&
@@ -898,7 +896,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     final owner = _userId;
 
     try {
-      // Reject from the details screen before loading profile, vehicle or draft.
       await _connection.requireConnection();
       if (!mounted || !_sameUser(owner)) return;
       await profileController.load();
@@ -1072,7 +1069,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     final owner = _userId;
 
     try {
-      // Keep the user on My parking instead of loading data for a blocked action.
       await _connection.requireConnection();
       if (!mounted || !_sameUser(owner)) return;
       final session = await sessionController.loadActiveSession();

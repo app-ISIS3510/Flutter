@@ -62,7 +62,7 @@ class SupabaseUserRepository implements UserRepository {
   @override
   Future<UserProfile> updateProfile(String name, String email) async {
     _userId;
-    // Supabase confirma el correo nuevo antes de reemplazar el correo actual.
+    // Keep the current email until Supabase confirms the new one.
     final response = await client.auth.updateUser(
       UserAttributes(
         data: {'full_name': name},

@@ -89,7 +89,6 @@ class NoActiveParkingScreen extends StatelessWidget {
                             height: 56,
                             child: ElevatedButton(
                               onPressed: () {
-                                // Parking lots
                                 onNavTap(1);
                               },
                               style: ElevatedButton.styleFrom(
