@@ -1,5 +1,4 @@
-/// Only app-owned validation messages may be shown verbatim.
-/// FormatException from a parser or a server must use a safe fallback instead.
+
 class UserInputException extends FormatException {
   const UserInputException(super.message);
 }
@@ -22,10 +21,13 @@ enum ErrorAction {
   load,
 }
 
-/// Approved presentation text. Remote messages are used only to recognize known
-/// errors; they are never interpolated into the text shown to the user.
+
 abstract final class ErrorMessages {
   static String offline(ErrorAction action) => switch (action) {
+    ErrorAction.signIn =>
+  'You are offline. Connect to the internet to sign in.',
+ErrorAction.createAccount =>
+  'You are offline. Connect to the internet to create an account.',
     ErrorAction.startParking => 'Go online to start parking.',
     ErrorAction.updatePickup => 'Go online to change your pickup time.',
     ErrorAction.endParking =>
@@ -35,6 +37,7 @@ abstract final class ErrorMessages {
     ErrorAction.profile =>
       'Your profile needs a connection. Please try again later.',
     _ => 'You are offline. Please try again later.',
+    
   };
   static const invalidCredentials =
       'The email or password is incorrect. Check your details and try again.';
@@ -71,7 +74,7 @@ abstract final class ErrorMessages {
     required String message,
     required ErrorAction action,
   }) {
-    // Older SDK responses sometimes omit code. Match only known full messages.
+
     final knownCode =
         code ??
         switch (message.trim().toLowerCase()) {
