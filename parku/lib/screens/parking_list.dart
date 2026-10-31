@@ -217,6 +217,24 @@ class _ParkingListScreenState extends State<ParkingListScreen>
   void _changeRadius(int radius) {
     if (_selectedRadius == radius) return;
 
+    final analytics = widget.analytics;
+
+    if (analytics != null) {
+      unawaited(
+        analytics
+            .track(
+              eventType: 'parking_search_performed',
+              screen: 'parking_list',
+              metadata: {
+                'search_method': 'distance_filter',
+                'radius_meters': radius,
+                'platform': 'flutter',
+              },
+            )
+            .catchError((Object _) {}),
+      );
+    }
+
     setState(() {
       _selectedRadius = radius;
       _loadResults();
@@ -330,10 +348,7 @@ class _ParkingListScreenState extends State<ParkingListScreen>
           ),
           child: Text(
             label,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           ),
         ),
       ),
@@ -520,10 +535,7 @@ class _ParkingListScreenState extends State<ParkingListScreen>
                       'Search parking lots',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: AppColors.greyText,
-                      ),
+                      style: TextStyle(fontSize: 16, color: AppColors.greyText),
                     ),
                   ),
                 ],
@@ -565,10 +577,7 @@ class _ParkingListScreenState extends State<ParkingListScreen>
               ),
               child: Text(
                 locationNotice,
-                style: const TextStyle(
-                  color: AppColors.darkText,
-                  fontSize: 13,
-                ),
+                style: const TextStyle(color: AppColors.darkText, fontSize: 13),
               ),
             ),
           ),
@@ -594,10 +603,7 @@ class _ParkingListScreenState extends State<ParkingListScreen>
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 16,
-              color: AppColors.darkText,
-            ),
+            style: const TextStyle(fontSize: 16, color: AppColors.darkText),
           ),
           const SizedBox(height: 12),
           TextButton(
@@ -638,9 +644,7 @@ class _ParkingListScreenState extends State<ParkingListScreen>
                           ? catalog!.parkingLots!
                           : <Parking>[];
 
-                      final count = useCatalog
-                          ? lots.length
-                          : results.length;
+                      final count = useCatalog ? lots.length : results.length;
 
                       final waiting =
                           !useCatalog &&
@@ -650,12 +654,10 @@ class _ParkingListScreenState extends State<ParkingListScreen>
                               catalogSnapshot.connectionState ==
                                   ConnectionState.waiting);
 
-                      final failed =
-                          !waiting && !useCatalog && data == null;
+                      final failed = !waiting && !useCatalog && data == null;
 
                       final notices = [
-                        if (data?.locationNotice != null)
-                          data!.locationNotice!,
+                        if (data?.locationNotice != null) data!.locationNotice!,
                         if (data != null && catalog?.isFromCache == true)
                           'Saved availability estimate.',
                         if (useCatalog)
@@ -731,10 +733,7 @@ class _ParkingListScreenState extends State<ParkingListScreen>
               ),
             ),
             const SizedBox(height: 10),
-            NavBar(
-              currentIndex: widget.currentIndex,
-              onTap: widget.onNavTap,
-            ),
+            NavBar(currentIndex: widget.currentIndex, onTap: widget.onNavTap),
           ],
         ),
       ),

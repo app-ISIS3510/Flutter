@@ -651,6 +651,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
               onSelectParking: openParkingDetail,
               onNavTap: _profileNavTap,
               onSearch: (query) {
+                if (query.trim().isNotEmpty) {
+                  unawaited(
+                    analyticsController
+                        .track(
+                          eventType: 'parking_search_performed',
+                          screen: 'search',
+                          metadata: {
+                            'search_method': 'text',
+                            'platform': 'flutter',
+                          },
+                        )
+                        .catchError((Object _) {}),
+                  );
+                }
+
                 Navigator.push<void>(
                   context,
                   MaterialPageRoute<void>(
@@ -1286,12 +1301,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     switch (currentIndex) {
       case 1:
         return ParkingListScreen(
-          analytics: analyticsController,
           currentIndex: currentIndex,
           onNavTap: changePage,
           controller: parkingController,
           onSelectParking: openParkingDetail,
           onSearchTap: openSearch,
+          analytics: analyticsController,
         );
 
       case 2:
