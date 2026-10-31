@@ -26,8 +26,15 @@ void main() {
       });
       final cache = ParkingLocalDataSource();
       await cache.saveParkingLots([parking]);
+
+      final savedAt = (await cache.readParkingLots())!.cachedAt;
+
       await preferences.reload();
       final reopened = ParkingLocalDataSource();
+      final restored = await reopened.readParkingLots();
+
+      expect(restored, isNotNull);
+      expect(restored!.cachedAt, savedAt);
       expect(
         (await reopened.readParkingForNearby())!.parkingLots.single.name,
         parking.name,

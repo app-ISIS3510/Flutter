@@ -31,6 +31,14 @@ void main() {
       final cache = ParkingLocalDataSource(database: db);
       await cache.saveParkingLots([parking]);
       await cache.saveParking(parking);
+      final savedAt = (await cache.readParkingLots())!.cachedAt;
+
+      expect(
+        savedAt.isBefore(
+          DateTime.now().toUtc().add(const Duration(seconds: 1)),
+        ),
+        isTrue,
+      );
       expect(
         (await cache.readParkingLots())!.parkingLots.single.imageUrl,
         parking.imageUrl,
@@ -101,7 +109,40 @@ void main() {
       expect(await (await database.database).getVersion(), 5);
     },
   );
+  test(
+    'SQLite preserves last successful catalog update after reopening',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'parku-last-sync-',
+      );
+      final path = '${directory.path}/cache.db';
 
+      final database = AppDatabase(
+        factory: databaseFactoryFfi,
+        databasePath: path,
+      );
+
+      try {
+        final cache = ParkingLocalDataSource(database: database);
+
+        await cache.saveParkingLots([parking]);
+
+        final savedAt = (await cache.readParkingLots())!.cachedAt;
+
+        await database.close();
+
+        final reopened = ParkingLocalDataSource(database: database);
+        final restored = await reopened.readParkingLots();
+
+        expect(restored, isNotNull);
+        expect(restored!.cachedAt, savedAt);
+        expect(restored.parkingLots.single.id, parking.id);
+      } finally {
+        await database.close();
+        await directory.delete(recursive: true);
+      }
+    },
+  );
   test(
     'browser catalog and details survive reopening the preferences store',
     () async {
