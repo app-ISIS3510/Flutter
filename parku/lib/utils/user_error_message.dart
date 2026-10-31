@@ -16,11 +16,17 @@ String userErrorMessage(
     return error.message;
   }
   if (error is UserInputException) return error.message;
+
   if (error is OfflineActionException) {
     return ErrorMessages.offline(action);
   }
+
+  if (error != null &&
+      (action == ErrorAction.signIn || action == ErrorAction.createAccount) &&
+      isConnectionError(error)) {
+    return ErrorMessages.offline(action);
+  }
   if (error is AuthException) {
-    // App-owned auth guards also arrive here, without a server error code.
     if (const {
       'Sign in to continue.',
       'The signed-in account changed.',
