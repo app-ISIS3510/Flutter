@@ -12,12 +12,14 @@ class AnalyticsController {
     String? screen,
     String? parkingId,
     Map<String, dynamic>? metadata,
+    DateTime? occurredAt,
   }) {
     return service.track(
       eventType: eventType,
       screen: screen,
       parkingId: parkingId,
       metadata: metadata,
+      occurredAt: occurredAt,
     );
   }
 }

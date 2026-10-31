@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../widgets/navigation_bar.dart';
 import 'end_parking.dart';
 import '../controllers/navigation_controller.dart';
+import '../controllers/analytics_controller.dart';
 import '../models/navigation_provider.dart';
 import '../widgets/external_navigation.dart';
 
@@ -17,6 +18,7 @@ class MyParkingScreen extends StatefulWidget {
   final Future<void> Function() onEndParking;
   final VoidCallback? onChangePickupTime;
   final NavigationController navigationController;
+  final AnalyticsController? analyticsController;
 
   final ParkingSession session;
   final Parking parking;
@@ -34,6 +36,7 @@ class MyParkingScreen extends StatefulWidget {
     this.onChangePickupTime,
     this.notice,
     this.onRefresh,
+    this.analyticsController,
   });
 
   @override
@@ -78,6 +81,9 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
         controller: widget.navigationController,
         provider: provider,
         parking: widget.parking,
+        analytics: widget.analyticsController,
+        screen: 'my_parking',
+        activeSessionId: widget.session.id,
       );
     } finally {
       if (mounted) setState(() => _isOpeningNavigation = false);

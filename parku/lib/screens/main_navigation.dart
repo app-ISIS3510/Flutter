@@ -12,6 +12,7 @@ import '../controllers/navigation_controller.dart';
 import '../controllers/parking_controller.dart';
 import '../controllers/profile_controller.dart';
 import '../controllers/session_controller.dart';
+import '../data/local/analytics_local_data_source.dart';
 import '../models/analytics_measurements.dart';
 import '../models/parking.dart';
 import '../models/parking_session.dart';
@@ -66,6 +67,7 @@ class MainNavigationScreen extends StatefulWidget {
   final Stream<List<ConnectivityResult>>? connectionChanges;
   final Future<List<ConnectivityResult>> Function()? checkConnection;
   final DateTime Function()? currentTime;
+  final AnalyticsLocalDataSource? analyticsLocalDataSource;
 
   const MainNavigationScreen({
     super.key,
@@ -75,6 +77,7 @@ class MainNavigationScreen extends StatefulWidget {
     this.connectionChanges,
     this.checkConnection,
     this.currentTime,
+    this.analyticsLocalDataSource,
   });
 
   @override
@@ -147,6 +150,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     required String screen,
     String? parkingId,
     Map<String, dynamic>? metadata,
+    DateTime? occurredAt,
   }) {
     unawaited(
       analyticsController
@@ -155,6 +159,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             screen: screen,
             parkingId: parkingId,
             metadata: metadata,
+            occurredAt: occurredAt,
           )
           .catchError((Object _) {}),
     );
@@ -191,7 +196,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     localStore = UserLocalStore(supabase);
     final personalData = PersonalDataRepository();
 
-    analyticsRepository = AnalyticsRepository(supabase);
+    analyticsRepository = AnalyticsRepository(
+      supabase,
+      localDataSource: widget.analyticsLocalDataSource,
+    );
     pickupAnalytics = PickupAnalyticsService(
       analyticsRepository,
       widget.sessionService?.store ??
@@ -1003,7 +1011,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                 eventType: 'parking_started',
                 screen: 'pickup_time',
                 parkingId: parkingId,
+                occurredAt: session.startedAt,
                 metadata: {
+                  'event_schema_version': 2,
+                  'session_started_at': session.startedAt
+                      .toUtc()
+                      .toIso8601String(),
                   'pickup_time': pickup.toIso8601String(),
                   if (!sessionService.recoveredRequest)
                     'duration_ms': stopwatch.elapsedMilliseconds,
@@ -1249,6 +1262,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           session: session,
           parking: parking,
           navigationController: navigationController,
+          analyticsController: analyticsController,
           onEndParking: () =>
               endParking(session: session, parkingName: parking.name),
           notice: sessionService.pendingRequest != null
