@@ -949,6 +949,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         MaterialPageRoute<void>(
           builder: (routeContext) => PickupTimeScreen(
             currentTime: widget.currentTime,
+            loadPickupChoices: pickupAnalytics.loadSummary,
             onSuggestionReady: (time) => suggestedTime = time,
             onNavTap: _profileNavTap,
             vehicle: vehicle!,

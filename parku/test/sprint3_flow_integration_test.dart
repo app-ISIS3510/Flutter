@@ -138,6 +138,16 @@ void main() {
             body = session == null ? [] : [session];
           case '/rest/v1/analytics_events':
             events.add(jsonDecode(request.body) as Map<String, dynamic>);
+          case '/rest/v1/bq9_pickup_time_choice_last_7_days':
+            body = [
+              for (final entry in {'Suggested': 2, 'Manual': 1, 'Not recorded': 1}.entries)
+                {
+                  'pickup_choice': entry.key,
+                  'successful_starts': entry.value,
+                  'percentage': entry.value * 25,
+                  'total_successful_starts': 4,
+                },
+            ];
           case '/rest/v1/app_admins':
           case '/rest/v1/favorites':
           case '/rest/v1/bq2_top_parking_completed_last_7_days':
@@ -227,6 +237,9 @@ void main() {
         );
         expect(tester.takeException(), isNull, reason: 'Pickup time layout');
         expect(find.textContaining('Suggested pickup time:'), findsOneWidget);
+        await waitForScreen(tester, find.text('50.00%'));
+        expect(find.text('Pickup time choices'), findsOneWidget);
+        expect(find.text('25.00%'), findsNWidgets(2));
         await tester.ensureVisible(find.text('Start parking'));
         await tester.tap(find.text('Start parking'));
         await waitForScreen(tester, find.text('I picked up my vehicle'));

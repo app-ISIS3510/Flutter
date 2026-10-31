@@ -4,11 +4,13 @@ import '../utils/user_error_message.dart';
 import '../widgets/user_error_notice.dart';
 
 import '../theme/app_theme.dart';
+import '../models/pickup_choice_summary.dart';
 import '../models/vehicle.dart';
 import '../services/driving_restriction_service.dart';
 import '../widgets/design_icon.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/pickup_widgets.dart';
+import '../widgets/pickup_choice_section.dart';
 import 'profile/profile_widgets.dart';
 
 class PickupTimeScreen extends StatefulWidget {
@@ -25,6 +27,7 @@ class PickupTimeScreen extends StatefulWidget {
   final VoidCallback? onCheckStatus;
   final String? notice;
   final ValueChanged<String>? onSuggestionReady;
+  final Future<PickupChoiceSummary> Function()? loadPickupChoices;
 
   const PickupTimeScreen({
     super.key,
@@ -40,6 +43,7 @@ class PickupTimeScreen extends StatefulWidget {
     this.onCheckStatus,
     this.notice,
     this.onSuggestionReady,
+    this.loadPickupChoices,
   });
 
   @override
@@ -309,14 +313,16 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
                                       color: AppColors.primary,
                                     ),
                               SizedBox(width: 10),
-                              Text(
-                                selectedVehicle?.type.label ??
-                                    'No vehicle selected',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  height: 1.35,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.darkText,
+                              Expanded(
+                                child: Text(
+                                  selectedVehicle?.type.label ??
+                                      'No vehicle selected',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    height: 1.35,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.darkText,
+                                  ),
                                 ),
                               ),
                             ],
@@ -478,6 +484,11 @@ class _PickupTimeScreenState extends State<PickupTimeScreen> {
                           ],
                         ),
                       ),
+                    ],
+
+                    if (widget.loadPickupChoices != null) ...[
+                      const SizedBox(height: 16),
+                      PickupChoiceSection(load: widget.loadPickupChoices!),
                     ],
 
                     const SizedBox(height: 16),
