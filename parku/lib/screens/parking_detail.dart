@@ -190,25 +190,14 @@ class _ParkingDetailScreenState extends State<ParkingDetailScreen> {
     if (_isOpeningNavigation) return;
     setState(() => _isOpeningNavigation = true);
     try {
-      final openedProvider = await openExternalNavigation(
+      await openExternalNavigation(
         context: context,
         controller: widget.navigationController,
         provider: provider,
         parking: parking,
+        analytics: widget.analyticsController,
+        screen: 'parking_detail',
       );
-      if (openedProvider != null) {
-        // Analytics must never prevent an external app from opening offline.
-        unawaited(
-          widget.analyticsController
-              .track(
-                eventType: 'navigation_opened',
-                screen: 'parking_detail',
-                parkingId: parking.id,
-                metadata: {'provider': openedProvider.analyticsValue},
-              )
-              .catchError((Object _) {}),
-        );
-      }
     } finally {
       if (mounted) setState(() => _isOpeningNavigation = false);
     }
@@ -394,7 +383,9 @@ class _ParkingDetailScreenState extends State<ParkingDetailScreen> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(20),
-                          child: ParkingPhoto(imageUrl: widget.parking['imageUrl']),
+                          child: ParkingPhoto(
+                            imageUrl: widget.parking['imageUrl'],
+                          ),
                         ),
                         Positioned(
                           top: 10,

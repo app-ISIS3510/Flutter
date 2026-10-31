@@ -88,10 +88,11 @@ class AnalyticsService {
     String? screen,
     String? parkingId,
     Map<String, dynamic>? metadata,
+    DateTime? occurredAt,
   }) async {
     final userId = repository.client.auth.currentUser?.id;
     if (userId == null) return;
-    final occurredAt = DateTime.now().toUtc();
+    final eventTime = (occurredAt ?? DateTime.now()).toUtc();
     final deviceContext = await deviceContextService.read();
     // Device enrichment must not reassign an event after switching accounts.
     if (repository.client.auth.currentUser?.id != userId) return;
@@ -100,7 +101,7 @@ class AnalyticsService {
       screen: screen,
       parkingId: parkingId,
       metadata: {...?metadata, ...deviceContext, 'platform': 'flutter'},
-      occurredAt: occurredAt,
+      occurredAt: eventTime,
     );
     if (!_disposed) unawaited(flushPending());
   }
