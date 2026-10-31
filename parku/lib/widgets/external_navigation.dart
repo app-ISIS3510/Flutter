@@ -8,6 +8,7 @@ import '../controllers/navigation_controller.dart';
 import '../controllers/analytics_controller.dart';
 import '../models/navigation_provider.dart';
 import '../models/parking.dart';
+import '../services/user_preferences_service.dart';
 import '../theme/app_theme.dart';
 import 'user_error_notice.dart';
 import '../utils/client_id.dart';
@@ -101,11 +102,13 @@ Future<NavigationProvider?> openExternalNavigation({
   while (context.mounted) {
     try {
       final requestedAt = DateTime.now().toUtc();
+
       await controller.openNavigation(
         provider: selectedProvider,
         latitude: latitude!,
         longitude: longitude!,
       );
+
       if (analytics != null &&
           analyticsOwner != null &&
           analytics.currentUserId == analyticsOwner) {
@@ -136,6 +139,9 @@ Future<NavigationProvider?> openExternalNavigation({
           }),
         );
       }
+
+      _savePreferredNavigationProvider(selectedProvider);
+
       return selectedProvider;
     } catch (error, stackTrace) {
       developer.log(
@@ -145,6 +151,7 @@ Future<NavigationProvider?> openExternalNavigation({
         stackTrace: stackTrace,
       );
       if (!context.mounted) return null;
+
       final alternative = await _showFallback(
         context,
         title: 'Could not open ${selectedProvider.label}',
@@ -153,11 +160,27 @@ Future<NavigationProvider?> openExternalNavigation({
         location: location,
         alternative: selectedProvider.alternative,
       );
+
       if (alternative == null || !context.mounted) return null;
       selectedProvider = alternative;
     }
   }
   return null;
+}
+
+void _savePreferredNavigationProvider(NavigationProvider provider) {
+  unawaited(
+    Future<void>.sync(
+      () => UserPreferencesService().saveNavigationProvider(provider),
+    ).catchError((Object error, StackTrace stackTrace) {
+      developer.log(
+        'Could not save preferred navigation provider',
+        name: 'ExternalNavigation',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }),
+  );
 }
 
 Future<NavigationProvider?> _showFallback(

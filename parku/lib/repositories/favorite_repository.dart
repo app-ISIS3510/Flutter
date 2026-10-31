@@ -9,6 +9,7 @@ import '../models/parking.dart';
 import '../services/connectivity_service.dart';
 import '../utils/error_messages.dart';
 import '../state/favorite_list_state.dart';
+import '../services/user_preferences_service.dart';
 
 class FavoriteRepository {
   final SupabaseClient client;
@@ -278,6 +279,18 @@ class FavoriteRepository {
             action['action_id'] as String,
             userId,
           );
+
+          try {
+            await UserPreferencesService().saveLastSyncTime(
+              DateTime.now().toUtc(),
+            );
+          } catch (error, stackTrace) {
+            developer.log(
+              'Could not save last synchronization time',
+              error: error,
+              stackTrace: stackTrace,
+            );
+          }
         } catch (error, stackTrace) {
           await localDataSource.postpone(
             action['action_id'] as String,
