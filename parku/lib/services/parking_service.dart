@@ -15,6 +15,7 @@ import '../state/parking_detail_state.dart';
 import '../state/parking_list_state.dart';
 import 'connectivity_service.dart';
 import 'distance_manager.dart';
+import 'smart_parking_processor.dart';
 
 enum SmartVehicleType { car, motorcycle }
 
@@ -145,10 +146,7 @@ class ParkingService {
   }) async {
     final catalog = await repository.getParkingCatalog();
 
-    return _calculateParkingOptions(
-      catalog,
-      vehicleType: vehicleType,
-    );
+    return _calculateParkingOptions(catalog, vehicleType: vehicleType);
   }
 
   Future<NearbyParkingState> getNearbyParking({
@@ -220,9 +218,7 @@ class ParkingService {
         .where((option) => option.distanceMeters.isFinite)
         .toList();
 
-    options.sort(
-      (a, b) => a.distanceMeters.compareTo(b.distanceMeters),
-    );
+    options.sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
 
     return options;
   }
@@ -291,91 +287,27 @@ class ParkingService {
           'radius filter. Enable location and tap Refresh location to search nearby.';
     }
 
-    final results = <SmartParkingResult>[];
-
-    for (final parking in parkingLots) {
-      if (position != null && !_hasValidCoordinates(parking)) {
-        continue;
-      }
-
-      final totalSpaces = vehicleType == SmartVehicleType.car
-          ? parking.carSpaces
-          : parking.motorcycleSpaces;
-
-      final availableSpaces = vehicleType == SmartVehicleType.car
-          ? parking.availableCarSpaces
-          : parking.availableMotorcycleSpaces;
-
-      if (totalSpaces <= 0) continue;
-
-      double? distance;
-
-      if (position != null) {
-        distance = distanceManager.calculateDistance(
-          userLatitude: position.latitude,
-          userLongitude: position.longitude,
-          parkingLatitude: parking.latitude!,
-          parkingLongitude: parking.longitude!,
-        );
-
-        if (!distance.isFinite || distance > radiusMeters) {
-          continue;
-        }
-      }
-
-      final validAvailable = availableSpaces.clamp(0, totalSpaces).toInt();
-      final percentage = validAvailable / totalSpaces * 100;
-
-      results.add(
-        SmartParkingResult(
-          parking: parking,
-          distanceMeters: distance,
-          availabilityPercentage: percentage,
-          availableSpaces: validAvailable,
-          totalSpaces: totalSpaces,
-          isRecommended: false,
-        ),
-      );
-    }
-
-    results.sort((a, b) {
-      if (position == null) {
-        return a.parking.name.compareTo(b.parking.name);
-      }
-
-      final availabilityComparison = b.availabilityPercentage.compareTo(
-        a.availabilityPercentage,
-      );
-
-      if (availabilityComparison != 0) {
-        return availabilityComparison;
-      }
-
-      final distanceComparison = a.distanceMeters!.compareTo(
-        b.distanceMeters!,
-      );
-
-      if (distanceComparison != 0) {
-        return distanceComparison;
-      }
-
-      return a.parking.id.compareTo(b.parking.id);
-    });
+    final processed = await processSmartParkingInIsolate(
+      SmartParkingProcessingInput(
+        parkingLots: [for (final parking in parkingLots) parking.toMap()],
+        radiusMeters: radiusMeters,
+        isCar: vehicleType == SmartVehicleType.car,
+        latitude: position?.latitude,
+        longitude: position?.longitude,
+      ),
+    );
 
     return SmartParkingResults(
       locationNotice: locationNotice,
       items: [
-        for (var i = 0; i < results.length; i++)
+        for (final item in processed)
           SmartParkingResult(
-            parking: results[i].parking,
-            distanceMeters: results[i].distanceMeters,
-            availabilityPercentage: results[i].availabilityPercentage,
-            availableSpaces: results[i].availableSpaces,
-            totalSpaces: results[i].totalSpaces,
-            isRecommended:
-                position != null &&
-                i == 0 &&
-                results[i].availableSpaces > 0,
+            parking: Parking.fromMap(item['parking'] as Map<String, dynamic>),
+            distanceMeters: item['distance'] as double?,
+            availabilityPercentage: item['percentage'] as double,
+            availableSpaces: item['available'] as int,
+            totalSpaces: item['total'] as int,
+            isRecommended: item['recommended'] as bool,
           ),
       ],
     );
