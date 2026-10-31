@@ -16,6 +16,7 @@ import '../state/parking_list_state.dart';
 import 'connectivity_service.dart';
 import 'distance_manager.dart';
 import 'smart_parking_processor.dart';
+import '../models/parking_search_result.dart';
 
 enum SmartVehicleType { car, motorcycle }
 
@@ -133,6 +134,10 @@ class ParkingService {
 
   Future<List<Parking>> searchParkingLots(String query) {
     return repository.searchParkingLots(query);
+  }
+
+  Future<ParkingSearchResult> searchParkingLotsWithSource(String query) {
+    return repository.searchParkingLotsWithSource(query);
   }
 
   Future<List<Parking>> getNearestParkingLots({int limit = 4}) async {

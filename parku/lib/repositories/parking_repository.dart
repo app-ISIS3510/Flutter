@@ -11,6 +11,7 @@ import '../state/parking_detail_state.dart';
 import '../utils/async_operations.dart';
 import '../services/connectivity_service.dart';
 import '../models/most_used_parking.dart';
+import '../models/parking_search_result.dart';
 
 class ParkingRepository {
   final SupabaseClient client;
@@ -38,9 +39,7 @@ class ParkingRepository {
         .order('parking_id', ascending: true)
         .limit(3);
 
-    return response
-        .map((row) => MostUsedParking.fromMap(row))
-        .toList();
+    return response.map((row) => MostUsedParking.fromMap(row)).toList();
   }
 
   ParkingDetailState? readMemoryParkingDetails(String id) {
@@ -84,8 +83,6 @@ class ParkingRepository {
         .map((item) => Parking.fromMap(item as Map<String, dynamic>))
         .toList();
 
-    // Refresh only already-viewed details. Loading the catalog must not fill
-    // the LRU or change which details the user accessed most recently.
     final byId = {for (final parking in parkingLots) parking.id: parking};
     final observedAt = DateTime.now().toUtc();
     for (final id in _detailMemoryCache.keys) {
@@ -250,25 +247,67 @@ class ParkingRepository {
     );
   }
 
-  Future<List<Parking>> searchParkingLots(String query) {
-    final trimmedQuery = query.trim();
-    if (trimmedQuery.isEmpty) return Future.value([]);
-    return _listReads.run(
-      'search:${trimmedQuery.toLowerCase()}',
-      () => _searchParkingLots(trimmedQuery),
-    );
+  Future<List<Parking>> searchParkingLots(String query) async {
+    final result = await searchParkingLotsWithSource(query);
+    return result.parkingLots;
   }
 
-  Future<List<Parking>> _searchParkingLots(String trimmedQuery) async {
-    final response = await client
-        .from('parking_lots_with_availability')
-        .select()
-        .or('name.ilike.%$trimmedQuery%,address.ilike.%$trimmedQuery%')
-        .order('name')
-        .timeout(const Duration(seconds: 15));
+  Future<ParkingSearchResult> searchParkingLotsWithSource(String query) {
+    final trimmedQuery = query.trim();
 
-    return (response as List<dynamic>)
-        .map((item) => Parking.fromMap(item as Map<String, dynamic>))
-        .toList();
+    if (trimmedQuery.isEmpty) {
+      return Future.value(const ParkingSearchResult(parkingLots: []));
+    }
+
+    return _searchParkingLotsWithSource(trimmedQuery);
+  }
+
+  Future<ParkingSearchResult> _searchParkingLotsWithSource(
+    String trimmedQuery,
+  ) async {
+    try {
+      final response = await client
+          .from('parking_lots_with_availability')
+          .select()
+          .or('name.ilike.%$trimmedQuery%,address.ilike.%$trimmedQuery%')
+          .order('name')
+          .timeout(const Duration(seconds: 15));
+
+      return ParkingSearchResult(
+        parkingLots: (response as List<dynamic>)
+            .map((item) => Parking.fromMap(item as Map<String, dynamic>))
+            .toList(),
+      );
+    } catch (error, stackTrace) {
+      developer.log(
+        'Network parking search failed. Trying local cache.',
+        name: 'ParkingRepository',
+        error: error,
+        stackTrace: stackTrace,
+      );
+
+      final cached = await localDataSource.readParkingForNearby();
+
+      if (cached == null) {
+        rethrow;
+      }
+
+      final normalizedQuery = trimmedQuery.toLowerCase();
+
+      final results = cached.parkingLots.where((parking) {
+        return parking.name.toLowerCase().contains(normalizedQuery) ||
+            parking.address.toLowerCase().contains(normalizedQuery);
+      }).toList();
+
+      results.sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+      );
+
+      return ParkingSearchResult(
+        parkingLots: results,
+        isFromCache: true,
+        updatedAt: cached.cachedAt,
+      );
+    }
   }
 }
