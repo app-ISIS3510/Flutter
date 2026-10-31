@@ -16,11 +16,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'support/memory_auth_storage.dart';
 import 'support/offline_fakes.dart';
+import 'support/unavailable_sqlite.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() async {
+    useUnavailableSqlite();
     await Supabase.initialize(
       url: 'https://test.invalid',
       publishableKey: 'test-key',
@@ -90,9 +92,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       tester
-          .state<ScaffoldMessengerState>(
-            find.byType(ScaffoldMessenger).first,
-          )
+          .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger).first)
           .clearSnackBars();
 
       await tester.pumpAndSettle();
@@ -121,6 +121,9 @@ void main() {
       expect(tester.takeException(), isNull);
 
       await tester.pumpWidget(const SizedBox());
+      // Reconnect starts bounded connection checks independently of widget
+      // animations. Let their timeout futures finish after disposal too.
+      await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();
       expect(events.hasListener, isFalse);
     },

@@ -2,9 +2,11 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 class AppDatabase {
-  AppDatabase._();
+  AppDatabase({this.factory, this.databasePath});
 
-  static final AppDatabase instance = AppDatabase._();
+  static final AppDatabase instance = AppDatabase();
+  final DatabaseFactory? factory;
+  final String? databasePath;
 
   Future<Database>? _database;
 
@@ -14,13 +16,17 @@ class AppDatabase {
 
   Future<Database> _openDatabase() async {
     try {
-      final directory = await getDatabasesPath();
+      final activeFactory = factory ?? databaseFactory;
+      final path =
+          databasePath ??
+          p.join(await activeFactory.getDatabasesPath(), 'parku.db');
 
-      return await openDatabase(
-        p.join(directory, 'parku.db'),
-        version: 4,
-        onCreate: (db, version) async {
-          await db.execute('''
+      return await activeFactory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 5,
+          onCreate: (db, version) async {
+            await db.execute('''
             CREATE TABLE parking_cache (
               id TEXT PRIMARY KEY NOT NULL,
               name TEXT NOT NULL,
@@ -32,38 +38,56 @@ class AppDatabase {
               price_per_minute REAL NOT NULL,
               opening_time TEXT,
               closing_time TEXT,
+              image_url TEXT,
               available_car_spaces INTEGER NOT NULL,
               available_motorcycle_spaces INTEGER NOT NULL,
               cached_at TEXT NOT NULL
             )
           ''');
 
-          await db.execute('''
+            await db.execute('''
             CREATE TABLE cache_metadata (
               cache_key TEXT PRIMARY KEY NOT NULL,
               last_updated_at TEXT NOT NULL
             )
           ''');
-          await _createParkingDetailCache(db);
-          await _createAnalyticsQueue(db);
-          await _createUserStorage(db);
-        },
-        onUpgrade: (db, oldVersion, newVersion) async {
-          if (oldVersion < 2) {
             await _createParkingDetailCache(db);
-          }
-          if (oldVersion < 3) {
             await _createAnalyticsQueue(db);
-          }
-          if (oldVersion < 4) {
             await _createUserStorage(db);
-          }
-        },
+          },
+          onUpgrade: (db, oldVersion, newVersion) async {
+            if (oldVersion < 2) {
+              await _createParkingDetailCache(db);
+            }
+            if (oldVersion < 3) {
+              await _createAnalyticsQueue(db);
+            }
+            if (oldVersion < 4) {
+              await _createUserStorage(db);
+            }
+            if (oldVersion < 5) {
+              for (final table in ['parking_cache', 'parking_detail_cache']) {
+                final columns = await db.rawQuery('PRAGMA table_info($table)');
+                if (!columns.any((column) => column['name'] == 'image_url')) {
+                  await db.execute(
+                    'ALTER TABLE $table ADD COLUMN image_url TEXT',
+                  );
+                }
+              }
+            }
+          },
+        ),
       );
     } catch (_) {
       _database = null;
       rethrow;
     }
+  }
+
+  Future<void> close() async {
+    final pending = _database;
+    _database = null;
+    if (pending != null) await (await pending).close();
   }
 
   Future<void> _createParkingDetailCache(Database db) async {
@@ -79,6 +103,7 @@ class AppDatabase {
         price_per_minute REAL NOT NULL,
         opening_time TEXT,
         closing_time TEXT,
+        image_url TEXT,
         available_car_spaces INTEGER NOT NULL,
         available_motorcycle_spaces INTEGER NOT NULL,
         cached_at TEXT NOT NULL

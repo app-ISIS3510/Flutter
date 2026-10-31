@@ -45,8 +45,10 @@ dependencies:
   cached_network_image: ^3.4.1
   flutter_cache_manager: ^3.4.5
   connectivity_plus: ^7.3.1
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
+  shared_preferences_web: ^2.4.3
   file: ^7.0.1
   sqflite_common_ffi: ^2.4.5
   flutter_test:

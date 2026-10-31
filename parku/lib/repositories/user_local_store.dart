@@ -3,22 +3,34 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class UserLocalStore {
   final SupabaseClient client;
   final Future<Directory> Function() _getDirectory;
   final bool _memoryOnly;
+  final SharedPreferences? browserPreferences;
   final _webData = <String, Map<String, dynamic>>{};
   final _writes = <String, Future<void>>{};
 
-  UserLocalStore(this.client, {Future<Directory> Function()? getDirectory})
-    : _getDirectory = getDirectory ?? getApplicationSupportDirectory,
-      _memoryOnly = false;
+  UserLocalStore(
+    this.client, {
+    Future<Directory> Function()? getDirectory,
+    this.browserPreferences,
+  }) : _getDirectory = getDirectory ?? getApplicationSupportDirectory,
+       _memoryOnly = false;
 
   UserLocalStore.memory(this.client)
     : _getDirectory = getApplicationSupportDirectory,
+      browserPreferences = null,
       _memoryOnly = true;
+
+  bool get _browser => kIsWeb || browserPreferences != null;
+  Future<SharedPreferences> get _preferences async =>
+      browserPreferences ?? await SharedPreferences.getInstance();
+  String _browserKey(String owner, String key) =>
+      'parku.offline.${Uri.encodeComponent(owner)}.${Uri.encodeComponent(key)}';
 
   String get userId =>
       client.auth.currentUser?.id ??
@@ -42,7 +54,16 @@ class UserLocalStore {
     final owner = userId;
     await _writes['$owner:$key'];
     checkUser(owner);
-    if (kIsWeb || _memoryOnly) return _webData['$owner:$key'];
+    if (_memoryOnly) return _webData['$owner:$key'];
+    if (_browser) {
+      final json = (await _preferences).getString(_browserKey(owner, key));
+      checkUser(owner);
+      if (json == null) return null;
+      final saved = jsonDecode(json) as Map<String, dynamic>;
+      return saved['user_id'] == owner
+          ? saved['data'] as Map<String, dynamic>
+          : null;
+    }
     final file = await _file(owner, key);
     if (!await file.exists()) return null;
     final saved = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
@@ -65,8 +86,20 @@ class UserLocalStore {
     Map<String, dynamic> data,
   ) async {
     checkUser(owner);
-    if (kIsWeb || _memoryOnly) {
+    if (_memoryOnly) {
       _webData['$owner:$key'] = Map.of(data);
+      return;
+    }
+    if (_browser) {
+      final preferences = await _preferences;
+      checkUser(owner);
+      if (!await preferences.setString(
+        _browserKey(owner, key),
+        jsonEncode({'user_id': owner, 'data': data}),
+      )) {
+        throw StateError('Could not save your information on this device.');
+      }
+      checkUser(owner);
       return;
     }
     final file = await _file(owner, key);
@@ -90,8 +123,14 @@ class UserLocalStore {
     final owner = userId;
     await _writes['$owner:$key'];
     checkUser(owner);
-    if (kIsWeb || _memoryOnly) {
+    if (_memoryOnly) {
       _webData.remove('$owner:$key');
+      return;
+    }
+    if (_browser) {
+      final preferences = await _preferences;
+      checkUser(owner);
+      await preferences.remove(_browserKey(owner, key));
       return;
     }
     final file = await _file(owner, key);

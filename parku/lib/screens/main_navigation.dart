@@ -449,7 +449,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
       _refreshFavorites();
     } catch (error) {
-      if (_sameUser(owner)) {
+      if (mounted && _sameUser(owner)) {
         showUserError(context, error, action: ErrorAction.favorites);
       }
     } finally {
@@ -547,7 +547,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       sessionService
           .savePickupDraft(key, {'time': time, 'vehicle_id': vehicleId})
           .catchError((Object _) {
-            if (_sameUser(owner)) {
+            if (mounted && _sameUser(owner)) {
               showUserMessage(
                 context,
                 'Could not save your selection on this device.',
@@ -817,13 +817,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
                             _refreshFavorites();
 
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Favorite saved. It will sync when online.',
-                                ),
-                              ),
-                            );
+                            // The heart already confirms an online change.
+                            // Explain the local save only when actually offline.
+                            final online = await _connection.connectionStatus();
+                            if (online == false &&
+                                context.mounted &&
+                                detailIsOpen &&
+                                detailUserId == _userId) {
+                              showUserInfo(
+                                context,
+                                'Saved on this device. Syncs when online.',
+                              );
+                            }
                           } catch (error) {
                             if (!context.mounted ||
                                 !detailIsOpen ||
@@ -885,8 +890,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     final owner = _userId;
 
     try {
+      // Reject from the details screen before loading profile, vehicle or draft.
+      await _connection.requireConnection();
+      if (!mounted || !_sameUser(owner)) return;
       await profileController.load();
-      if (!_sameUser(owner)) return;
+      if (!mounted || !_sameUser(owner)) return;
 
       if (profileController.error != null) {
         showUserMessage(
@@ -921,7 +929,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
       vehicle ??= await _chooseVehicle();
 
-      if (vehicle == null || !_sameUser(owner)) return;
+      if (!mounted || vehicle == null || !_sameUser(owner)) return;
 
       _track(
         eventType: 'pickup_time_viewed',
@@ -1020,7 +1028,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                 },
               );
 
-              if (!routeContext.mounted) return;
+              if (!mounted || !routeContext.mounted) return;
 
               _returnToMain();
               unawaited(openMyParking());
@@ -1051,6 +1059,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     final owner = _userId;
 
     try {
+      // Keep the user on My parking instead of loading data for a blocked action.
+      await _connection.requireConnection();
+      if (!mounted || !_sameUser(owner)) return;
       final session = await sessionController.loadActiveSession();
 
       if (!_sameUser(owner) || session == null) return;
@@ -1068,7 +1079,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
       final draft = await sessionService.getPickupDraft('change_${session.id}');
 
-      if (!_sameUser(owner)) return;
+      if (!mounted || !_sameUser(owner)) return;
 
       await Navigator.push<void>(
         context,
@@ -1160,7 +1171,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       }
     }
 
-    if (!_sameUser(owner)) return;
+    if (!mounted || !_sameUser(owner)) return;
 
     if (sessionService.historySaveFailed) {
       showUserMessage(
@@ -1255,9 +1266,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           navigationController: navigationController,
           onEndParking: () =>
               endParking(session: session, parkingName: parking.name),
-          notice:
-              sessionService.notice ??
-              (details.isFromCache ? 'Using saved parking details.' : null),
+          notice: sessionService.pendingRequest != null
+              ? 'Request pending. Refresh to confirm.'
+              : cachedSession || sessionService.usingSavedSession
+              ? 'Last confirmed session'
+              : sessionService.localSaveFailed
+              ? 'Offline copy could not be saved.'
+              : details.isFromCache
+              ? 'Saved parking details'
+              : null,
           onRefresh: openMyParking,
           onChangePickupTime: openChangePickupTime,
         );
@@ -1303,19 +1320,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             final saved = snapshot.data;
             final favorites = saved?.favorites ?? [];
 
-            final storageNotice = [
-              if (saved?.isFromCache == true)
-                'Showing saved favorites. They may be incomplete or outdated.',
-              if ((saved?.pendingCount ?? 0) > 0)
-                '${saved!.pendingCount} change(s) saved on this device and waiting to sync.',
-              if (saved?.updatedAt != null)
-                'Last server update: ${saved!.updatedAt!.toLocal().toString().split('.').first}',
-            ].join('\n');
+            final storageNotice = (saved?.pendingCount ?? 0) > 0
+                ? 'Changes sync when online.'
+                : saved?.isFromCache == true
+                ? 'Saved favorites'
+                : null;
 
             if (favorites.isEmpty) {
               return NoFavoritesScreen(
                 onNavTap: changePage,
-                storageNotice: storageNotice.isEmpty ? null : storageNotice,
+                storageNotice: storageNotice,
                 onRefresh: _refreshFavorites,
               );
             }
@@ -1323,7 +1337,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             return FavoritesScreen(
               favorites: favorites,
               pendingRemovalIds: Set.unmodifiable(_removingFavoriteIds),
-              storageNotice: storageNotice.isEmpty ? null : storageNotice,
+              storageNotice: storageNotice,
               onRefresh: _refreshFavorites,
               onNavTap: changePage,
               onSelectParking: openParkingDetail,
