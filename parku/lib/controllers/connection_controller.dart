@@ -10,6 +10,9 @@ class ConnectionController extends ChangeNotifier {
   final Stream<List<ConnectivityResult>> changes;
   final Future<List<ConnectivityResult>> Function() checkConnection;
   final Duration delay;
+  final Duration retryDelay;
+  final bool Function()? shouldRetry;
+  int _retries = 0;
   StreamSubscription<List<ConnectivityResult>>? _subscription;
   Timer? _timer;
   final _closed = Completer<List<ConnectivityResult>>();
@@ -26,6 +29,8 @@ class ConnectionController extends ChangeNotifier {
     Stream<List<ConnectivityResult>>? changes,
     Future<List<ConnectivityResult>> Function()? checkConnection,
     this.delay = const Duration(milliseconds: 400),
+    this.retryDelay = const Duration(seconds: 5),
+    this.shouldRetry,
   }) : changes = changes ?? Connectivity().onConnectivityChanged,
        checkConnection = checkConnection ?? Connectivity().checkConnectivity;
 
@@ -67,6 +72,7 @@ class ConnectionController extends ChangeNotifier {
     if (available == hasNetwork && !changed) return;
     _networks = networks;
     hasNetwork = available;
+    _retries = 0;
     error = null;
     if (available) {
       _schedule();
@@ -84,7 +90,10 @@ class ConnectionController extends ChangeNotifier {
           .timeout(const Duration(seconds: 4));
       if (_disposed || version != _events) return;
       _receive(results);
-      if (refresh && hasNetwork == true) _schedule();
+      if (refresh && hasNetwork == true) {
+        _retries = 0;
+        _schedule();
+      }
     } catch (_) {
       if (_disposed || version != _events) return;
       error = 'Could not check the connection. You can still refresh manually.';
@@ -100,6 +109,19 @@ class ConnectionController extends ChangeNotifier {
     }
     _timer?.cancel();
     _timer = Timer(delay, () => unawaited(_refresh()));
+  }
+
+  void retryPending() {
+    if (_disposed ||
+        checking ||
+        hasNetwork != true ||
+        shouldRetry?.call() != true ||
+        _retries >= 3) {
+      return;
+    }
+    _retries++;
+    _timer?.cancel();
+    _timer = Timer(retryDelay, () => unawaited(_refresh()));
   }
 
   Future<void> _refresh() async {
@@ -120,6 +142,8 @@ class ConnectionController extends ChangeNotifier {
         if (_checkAgain) {
           _checkAgain = false;
           _schedule();
+        } else if (error != null) {
+          retryPending();
         }
       }
     }

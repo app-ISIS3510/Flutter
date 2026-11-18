@@ -43,7 +43,10 @@ void main() {
     'a vehicle loading error does not hide the profile or sign-out button',
     (tester) async {
       final controller = ProfileController(
-        ProfileService(UnavailableVehicles()),
+        ProfileService(
+          UnavailableVehicles(),
+          checkConnection: () async => true,
+        ),
       );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
@@ -65,7 +68,9 @@ void main() {
   );
   test('a late sign-out response does not erase a new account', () async {
     final repo = DelayedSignOut();
-    final controller = ProfileController(ProfileService(repo));
+    final controller = ProfileController(
+      ProfileService(repo, checkConnection: () async => true),
+    );
     addTearDown(controller.dispose);
     await controller.load();
     final signingOut = controller.signOut();
@@ -116,7 +121,9 @@ void main() {
     'official information opens the correct URL and handles launcher failure',
     (tester) async {
       final repo = FakeUserRepository()..vehicles = [car];
-      final controller = ProfileController(ProfileService(repo));
+      final controller = ProfileController(
+        ProfileService(repo, checkConnection: () async => true),
+      );
       addTearDown(controller.dispose);
       await controller.load();
       MethodCall? launched;
@@ -165,7 +172,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       addTearDown(tester.view.resetViewInsets);
       final controller = ProfileController(
-        ProfileService(FakeUserRepository()),
+        ProfileService(FakeUserRepository(), checkConnection: () async => true),
       );
       addTearDown(controller.dispose);
       await controller.load();

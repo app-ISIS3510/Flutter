@@ -33,7 +33,11 @@ void main() {
     await remote.addVehicle(VehicleType.car, 'ABC123');
     remote.writes = 0;
     controller = ProfileController(
-      ProfileService(remote, store: UserLocalStore.memory(client)),
+      ProfileService(
+        remote,
+        store: UserLocalStore.memory(client),
+        checkConnection: () async => null,
+      ),
     );
     await controller.load();
     remote.online = false;

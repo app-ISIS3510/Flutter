@@ -51,7 +51,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          pending != null && pending.isNotEmpty
+          widget.controller.changeQueued
+              ? 'Changes saved on this device. They will be sent when you reconnect.'
+              : pending != null && pending.isNotEmpty
               ? 'Name saved. Check your email to confirm the new address.'
               : 'Profile updated.',
         ),

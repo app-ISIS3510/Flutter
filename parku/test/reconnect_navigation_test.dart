@@ -17,6 +17,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'support/memory_auth_storage.dart';
 import 'support/offline_fakes.dart';
 import 'support/unavailable_sqlite.dart';
+import 'support/navigation_actions.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -58,7 +59,11 @@ void main() {
       final client = Supabase.instance.client;
       final local = UserLocalStore.memory(client);
       final users = UnstableUserRepository();
-      final profile = ProfileService(users, store: local);
+      final profile = ProfileService(
+        users,
+        store: local,
+        checkConnection: () async => null,
+      );
       await profile.getProfile();
       await profile.getVehicles();
       users.loseReply = true;
@@ -70,7 +75,11 @@ void main() {
       final sessions = UnstableSessionRepository(client)
         ..loseReply = true
         ..disconnectAfterWrite = true;
-      final session = SessionService(sessions, store: local);
+      final session = SessionService(
+        sessions,
+        store: local,
+        checkConnection: () async => null,
+      );
       await expectLater(
         session.startParking(
           parkingId: 'parking-1',
@@ -97,7 +106,7 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Profile').hitTestable().last);
+      await tapNavigation(tester, 'Profile');
       await tester.pumpAndSettle();
       expect(
         find.textContaining('A previous change is not confirmed'),
@@ -127,4 +136,75 @@ void main() {
       expect(events.hasListener, isFalse);
     },
   );
+  testWidgets('saved profile and parking requests are sent after reconnect', (
+    tester,
+  ) async {
+    final client = Supabase.instance.client;
+    final store = UserLocalStore.memory(client);
+    var connected = true;
+    final events = StreamController<List<ConnectivityResult>>();
+    addTearDown(events.close);
+    final users = UnstableUserRepository();
+    await users.addVehicle(VehicleType.motorcycle, 'ABC12D');
+    users.writes = 0;
+    final profile = ProfileService(
+      users,
+      store: store,
+      checkConnection: () async => connected,
+    );
+    await profile.getProfile();
+    await profile.getVehicles();
+    final sessions = UnstableSessionRepository(client);
+    final service = SessionService(
+      sessions,
+      store: store,
+      checkConnection: () async => connected,
+    );
+    connected = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MainNavigationScreen(
+          profileService: profile,
+          sessionService: service,
+          connectionChanges: events.stream,
+          checkConnection: () async => [
+            connected ? ConnectivityResult.wifi : ConnectivityResult.none,
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tapNavigation(tester, 'Profile');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit profile'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).first, 'Juan');
+    await tester.ensureVisible(find.text('Save changes'));
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    expect(users.writes, 0);
+    expect(profile.queuedChanges, hasLength(1));
+    await expectLater(
+      service.startParking(
+        parkingId: 'parking-1',
+        vehicleId: 'vehicle-1',
+        pickupTime: DateTime.now().add(const Duration(hours: 2)),
+      ),
+      throwsA(isA<QueuedChange>()),
+    );
+    connected = true;
+    events.add([ConnectivityResult.wifi]);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(users.profile.fullName, 'Juan');
+    expect(profile.queuedChanges, isEmpty);
+    expect(service.pendingRequest, isNull);
+    expect(users.writes, 1);
+    expect(sessions.starts, 1);
+    expect(find.text('Juan'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 6));
+  });
 }

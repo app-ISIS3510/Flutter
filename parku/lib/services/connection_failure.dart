@@ -33,3 +33,7 @@ class ConnectionFailure implements Exception {
   @override
   String toString() => message;
 }
+
+class QueuedChange extends ConnectionFailure {
+  const QueuedChange(super.message);
+}

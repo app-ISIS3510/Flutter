@@ -72,7 +72,7 @@ void main() {
         'vehicle_id': 'vehicle-1',
       });
       remote.online = false;
-      await expectLater(start(), throwsA(isA<SocketException>()));
+      await expectLater(start(), throwsA(isA<QueuedChange>()));
 
       expect(remote.starts, 0);
       expect(
@@ -193,7 +193,7 @@ void main() {
           sessionId: confirmed.id,
           pickupTime: pickup.add(const Duration(hours: 1)),
         ),
-        throwsA(isA<SocketException>()),
+        throwsA(isA<QueuedChange>()),
       );
 
       expect(state.activeSession?.pickupTime, pickup);
@@ -278,7 +278,7 @@ void main() {
 
       await expectLater(
         controller.endParking(sessionId: confirmed.id),
-        throwsA(isA<SocketException>()),
+        throwsA(isA<QueuedChange>()),
       );
 
       expect(state.activeSession?.id, confirmed.id);

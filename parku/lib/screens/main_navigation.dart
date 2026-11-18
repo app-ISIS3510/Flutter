@@ -193,7 +193,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     final supabase = Supabase.instance.client;
     _userId = supabase.auth.currentUser?.id;
 
-    localStore = UserLocalStore(supabase);
+    localStore =
+        widget.sessionService?.store ??
+        widget.profileService?.store ??
+        UserLocalStore(supabase);
     final personalData = PersonalDataRepository();
 
     analyticsRepository = AnalyticsRepository(
@@ -303,8 +306,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       onReconnect: _refreshAfterReconnect,
       changes: widget.connectionChanges,
       checkConnection: widget.checkConnection,
+      shouldRetry: () =>
+          profileController.busy ||
+          profileController.loading ||
+          sessionController.busy ||
+          isLoadingSession ||
+          profileController.service.queuedChanges.isNotEmpty ||
+          sessionService.pendingRequest != null,
     );
     connection.addListener(_showConnectionNotice);
+    profileController.addListener(_schedulePendingChanges);
 
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -315,6 +326,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   Future<void> _refreshAfterReconnect() async {
     final owner = _userId;
     if (!_sameUser(owner)) return;
+
+    final hadPending =
+        profileController.service.queuedChanges.isNotEmpty ||
+        sessionService.pendingRequest != null;
 
     unawaited(analyticsService.flushPending());
     unawaited(favoriteSyncService.flush());
@@ -332,13 +347,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     await profileController.load();
     if (!_sameUser(owner)) return;
 
-    if (showingMyParking) {
-      await openMyParking();
-    } else {
-      await sessionController.loadActiveSession();
+    try {
+      if (showingMyParking) {
+        await openMyParking();
+      } else {
+        await sessionController.loadActiveSession();
+      }
+    } catch (error) {
+      throw ConnectionFailure(SessionController.messageFor(error));
     }
 
     if (!_sameUser(owner)) return;
+
+    if (profileController.error != null) {
+      throw ConnectionFailure(profileController.error!);
+    }
 
     if (_sessionLoadError != null ||
         profileController.error != null ||
@@ -351,10 +374,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     }
 
     if (sessionService.pendingRequest != null ||
-        profileController.pendingChange != null) {
+        profileController.pendingChange != null ||
+        profileController.service.queuedChanges.isNotEmpty) {
       throw const ConnectionFailure(
         'A previous request is unconfirmed. Check its status before retrying.',
       );
+    }
+    if (hadPending && mounted) {
+      showUserMessage(context, 'Your saved changes have been confirmed.');
     }
   }
 
@@ -366,6 +393,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
     if (message != null && !connection.checking) {
       showUserMessage(context, message);
+    }
+  }
+
+  void _schedulePendingChanges() {
+    if (!profileController.busy &&
+        !profileController.loading &&
+        profileController.service.queuedChanges.isNotEmpty) {
+      connection.retryPending();
     }
   }
 
@@ -385,6 +420,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     WidgetsBinding.instance.removeObserver(this);
 
     connection.removeListener(_showConnectionNotice);
+    profileController.removeListener(_schedulePendingChanges);
     connection.dispose();
 
     analyticsService.dispose();
@@ -487,6 +523,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   Future<T> _parkingRequest<T>(Future<T> Function() request) async {
     try {
       return await request();
+    } on QueuedChange {
+      rethrow;
     } on ConnectionFailure catch (error) {
       throw UserInputException(error.message);
     }
@@ -575,6 +613,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   Future<ParkingDetailState> _loadSessionParking(String id) async {
     final owner = _userId;
     _requireUser(owner);
+
+    if (await _connection.connectionStatus() == false) {
+      final saved = await sessionService.getSavedParking(id);
+      _requireUser(owner);
+      if (saved == null) {
+        throw const ConnectionFailure(
+          'No parking details are saved on this device.',
+        );
+      }
+      return ParkingDetailState(parking: saved, isFromCache: true);
+    }
 
     try {
       final details = await parkingController
@@ -903,7 +952,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     final owner = _userId;
 
     try {
-      await _connection.requireConnection();
       if (!mounted || !_sameUser(owner)) return;
       await profileController.load();
       if (!mounted || !_sameUser(owner)) return;
@@ -1005,23 +1053,30 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
               });
 
               _requireUser(owner);
-              await _connection.requireConnection();
-              _requireUser(owner);
-
               final pickup = _buildPickupDateTime(time);
               final stopwatch = Stopwatch()..start();
 
-              final session = await _parkingRequest(
-                () => sessionController.startParking(
-                  parkingId: parkingId,
-                  pickupTime: pickup,
-                  vehicleId: chosenVehicle.id,
-                  parkingName: parking['name'] ?? 'Parking stay',
-                  suggestedPickupTime: suggestedTime == null
-                      ? null
-                      : _buildPickupDateTime(suggestedTime!),
-                ),
-              );
+              ParkingSession session;
+              try {
+                session = await _parkingRequest(
+                  () => sessionController.startParking(
+                    parkingId: parkingId,
+                    pickupTime: pickup,
+                    vehicleId: chosenVehicle.id,
+                    parkingName: parking['name'] ?? 'Parking stay',
+                    suggestedPickupTime: suggestedTime == null
+                        ? null
+                        : _buildPickupDateTime(suggestedTime!),
+                  ),
+                );
+              } on QueuedChange catch (change) {
+                if (!mounted || !_sameUser(owner)) return;
+                connection.retryPending();
+                _returnToMain();
+                unawaited(openMyParking());
+                showUserMessage(context, change.message);
+                return;
+              }
 
               stopwatch.stop();
 
@@ -1077,7 +1132,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     final owner = _userId;
 
     try {
-      await _connection.requireConnection();
       if (!mounted || !_sameUser(owner)) return;
       final session = await sessionController.loadActiveSession();
 
@@ -1125,9 +1179,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
               });
 
               _requireUser(owner);
-              await _connection.requireConnection();
-              _requireUser(owner);
-
               final pickup = _buildPickupDateTime(time);
 
               try {
@@ -1138,6 +1189,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                     parkingName: parking.name,
                   ),
                 );
+              } on QueuedChange catch (change) {
+                connection.retryPending();
+                if (mounted && _sameUser(owner)) {
+                  showUserMessage(context, change.message);
+                }
+                return;
               } finally {
                 if (_sameUser(owner)) {
                   setState(() {});
@@ -1172,8 +1229,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     final owner = _userId;
 
     _requireUser(owner);
-    await _connection.requireConnection();
-    _requireUser(owner);
 
     try {
       await _parkingRequest(
@@ -1182,6 +1237,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           parkingName: parkingName,
         ),
       );
+    } on QueuedChange catch (change) {
+      connection.retryPending();
+      if (mounted && _sameUser(owner)) showUserMessage(context, change.message);
+      return;
     } finally {
       if (_sameUser(owner)) {
         setState(() {});
@@ -1285,7 +1344,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           onEndParking: () =>
               endParking(session: session, parkingName: parking.name),
           notice: sessionService.pendingRequest != null
-              ? 'Request pending. Refresh to confirm.'
+              ? sessionService.notice
               : cachedSession || sessionService.usingSavedSession
               ? 'Last confirmed session'
               : sessionService.localSaveFailed

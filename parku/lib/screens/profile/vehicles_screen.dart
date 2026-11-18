@@ -192,7 +192,9 @@ class VehiclesScreen extends StatelessWidget {
                                             ).showSnackBar(
                                               SnackBar(
                                                 content: Text(
-                                                  '${vehicle.plate} selected for your next parking stay.',
+                                                  controller.changeQueued
+                                                      ? 'Your selection is saved on this device. It will be sent when you reconnect.'
+                                                      : '${vehicle.plate} selected for your next parking stay.',
                                                 ),
                                               ),
                                             );

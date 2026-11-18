@@ -235,7 +235,11 @@ void main() {
     addTearDown(client.dispose);
     final local = UserLocalStore.memory(client);
     final sessions = UnstableSessionRepository(client);
-    final service = SessionService(sessions, store: local);
+    final service = SessionService(
+      sessions,
+      store: local,
+      checkConnection: () async => null,
+    );
     final state = SessionState();
     final sessionController = SessionController(service, state);
     addTearDown(state.dispose);
@@ -253,7 +257,9 @@ void main() {
     final users = UnstableUserRepository()
       ..loseReply = true
       ..disconnectAfterWrite = true;
-    final profile = ProfileController(ProfileService(users, store: local));
+    final profile = ProfileController(
+      ProfileService(users, store: local, checkConnection: () async => null),
+    );
     addTearDown(profile.dispose);
     expect(await profile.addVehicle(VehicleType.car, 'ABC123'), isFalse);
     controller.dispose();
@@ -374,4 +380,29 @@ void main() {
       );
     },
   );
+  test('a busy reconnect is retried while there are saved changes', () async {
+    controller.dispose();
+    var busy = true;
+    controller = ConnectionController(
+      onReconnect: () async {
+        refreshes++;
+        if (busy) {
+          throw const ConnectionFailure('A request is still in progress.');
+        }
+      },
+      changes: events.stream,
+      checkConnection: () async => [ConnectivityResult.wifi],
+      shouldRetry: () => busy,
+      delay: Duration.zero,
+      retryDelay: const Duration(milliseconds: 5),
+    );
+    await controller.start();
+    await settleEvents();
+    expect(refreshes, 1);
+    busy = false;
+    await Future<void>.delayed(const Duration(milliseconds: 15));
+    await settleEvents();
+    expect(refreshes, 2);
+    expect(controller.error, isNull);
+  });
 }

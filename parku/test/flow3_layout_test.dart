@@ -29,7 +29,9 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final repository = FakeUserRepository();
-    final controller = ProfileController(ProfileService(repository));
+    final controller = ProfileController(
+      ProfileService(repository, checkConnection: () async => true),
+    );
     addTearDown(controller.dispose);
     const vehicle = Vehicle(
       id: 'car',

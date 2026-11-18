@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/user_profile.dart';
@@ -10,12 +11,14 @@ import '../repositories/user_repository.dart';
 import '../repositories/user_local_store.dart';
 import '../utils/error_messages.dart';
 import 'connection_failure.dart';
+import 'connectivity_service.dart';
 
 class ProfileService {
   final UserRepository repository;
   final PersonalDataRepository? local;
   final UserLocalStore? store;
   final Duration requestTimeout;
+  final Future<bool?> Function() checkConnection;
 
   bool profileFromCache = false;
   bool vehiclesFromCache = false;
@@ -24,6 +27,8 @@ class ProfileService {
   Map<String, dynamic>? pendingChange;
   Map<String, dynamic>? profileDraft;
   Map<String, dynamic>? vehicleDraft;
+  List<Map<String, dynamic>> queuedChanges = [];
+  bool _syncing = false;
 
   UserProfile? _lastProfile;
   List<Vehicle>? _lastVehicles;
@@ -37,7 +42,9 @@ class ProfileService {
     this.local,
     this.store,
     this.requestTimeout = const Duration(seconds: 8),
-  });
+    Future<bool?> Function()? checkConnection,
+  }) : checkConnection =
+           checkConnection ?? ConnectivityService().connectionStatus;
 
   bool get usingSavedData => profileFromCache || vehiclesFromCache;
 
@@ -57,6 +64,7 @@ class ProfileService {
     pendingChange = null;
     profileDraft = null;
     vehicleDraft = null;
+    queuedChanges = [];
     profileFromCache = false;
     vehiclesFromCache = false;
     localSaveFailed = false;
@@ -106,9 +114,19 @@ class ProfileService {
 
     _lastProfile = profile;
     _profileOwner = owner;
+    profileFromCache = false;
 
     try {
-      await local?.saveProfile(profile);
+      if (local != null && !kIsWeb) {
+        await local!.saveProfile(profile);
+      } else {
+        await store?.write('saved_profile', {
+          'id': profile.id,
+          'name': profile.fullName,
+          'email': profile.email,
+          'pending_email': profile.pendingEmail,
+        });
+      }
     } catch (_) {
       localSaveFailed = true;
     }
@@ -116,18 +134,31 @@ class ProfileService {
     _checkOwner(owner);
   }
 
-  Future<void> _saveVehicles(
-    List<Vehicle> vehicles,
-    String? owner,
-  ) async {
+  Future<void> _saveVehicles(List<Vehicle> vehicles, String? owner) async {
     _checkOwner(owner);
 
     _lastVehicles = vehicles;
     _vehiclesOwner = owner;
+    vehiclesFromCache = false;
 
     try {
       if (owner != null) {
-        await local?.saveVehicles(owner, vehicles);
+        if (local != null && !kIsWeb) {
+          await local!.saveVehicles(owner, vehicles);
+        } else {
+          await store?.write('saved_vehicles', {
+            'vehicles': vehicles
+                .map(
+                  (vehicle) => {
+                    'id': vehicle.id,
+                    'vehicle_type': vehicle.type.value,
+                    'plate': vehicle.plate,
+                    'is_selected': vehicle.isSelected,
+                  },
+                )
+                .toList(),
+          });
+        }
       }
     } catch (_) {
       localSaveFailed = true;
@@ -138,7 +169,8 @@ class ProfileService {
 
   Future<UserProfile> getProfile() async {
     final owner = _owner;
-    profileFromCache = false;
+
+    if (await checkConnection() == false) return _savedProfile(owner);
 
     try {
       final profile = await repository.getProfile().timeout(requestTimeout);
@@ -147,47 +179,60 @@ class ProfileService {
     } catch (error) {
       if (!isConnectionError(error) || store == null) rethrow;
 
-      UserProfile? saved = _profileOwner == owner ? _lastProfile : null;
-
-      try {
-        if (saved == null && owner != null) {
-          saved = await local?.getProfile(owner);
-        }
-      } catch (_) {
-        localSaveFailed = true;
-      }
-
-      _checkOwner(owner);
-
-      if (saved == null && repository is SupabaseUserRepository) {
-        final cached = (repository as SupabaseUserRepository).cachedProfile;
-
-        if (cached?.id == owner) {
-          saved = cached;
-        }
-      }
-
-      if (saved == null) {
-        throw const ConnectionFailure(
-          'No saved profile is available. Connect to the internet and try again.',
-        );
-      }
-
-      profileFromCache = true;
-      _lastProfile = saved;
-      _profileOwner = owner;
-
-      return saved;
+      return _savedProfile(owner);
     }
+  }
+
+  Future<UserProfile?> readSavedProfile() async {
+    final owner = _owner;
+    _checkOwner(owner);
+    if (_profileOwner == owner && _lastProfile != null) {
+      profileFromCache = true;
+      return _lastProfile;
+    }
+    if (owner == null) return null;
+    UserProfile? saved;
+    try {
+      if (local != null && !kIsWeb) {
+        saved = await local!.getProfile(owner);
+      } else {
+        final data = await store?.read('saved_profile');
+        if (data != null && data['id'] == owner) {
+          saved = UserProfile(
+            id: owner,
+            fullName: data['name'] as String,
+            email: data['email'] as String,
+            pendingEmail: data['pending_email'] as String?,
+          );
+        }
+      }
+    } catch (_) {
+      localSaveFailed = true;
+    }
+    _checkOwner(owner);
+    if (saved != null) profileFromCache = true;
+    return saved;
+  }
+
+  Future<UserProfile> _savedProfile(String? owner) async {
+    final saved = await readSavedProfile();
+    _checkOwner(owner);
+    if (saved == null) {
+      throw const ConnectionFailure(
+        'No saved profile is available. Connect to the internet and try again.',
+      );
+    }
+    profileFromCache = true;
+    _lastProfile = saved;
+    _profileOwner = owner;
+    return saved;
   }
 
   Future<bool> isAdmin() async {
     if (profileFromCache) return false;
 
     try {
-      return await repository.isAdmin().timeout(
-        const Duration(seconds: 4),
-      );
+      return await repository.isAdmin().timeout(const Duration(seconds: 4));
     } catch (error) {
       if (!isConnectionError(error)) rethrow;
       return false;
@@ -196,7 +241,8 @@ class ProfileService {
 
   Future<List<Vehicle>> getVehicles() async {
     final owner = _owner;
-    vehiclesFromCache = false;
+
+    if (await checkConnection() == false) return _savedVehicles(owner);
 
     try {
       final vehicles = await repository.getVehicles().timeout(requestTimeout);
@@ -205,30 +251,50 @@ class ProfileService {
     } catch (error) {
       if (!isConnectionError(error) || store == null) rethrow;
 
-      List<Vehicle>? saved = _vehiclesOwner == owner ? _lastVehicles : null;
-
-      try {
-        if (saved == null && owner != null) {
-          saved = await local?.getVehicles(owner);
-        }
-      } catch (_) {
-        localSaveFailed = true;
-      }
-
-      _checkOwner(owner);
-
-      if (saved == null) {
-        throw const ConnectionFailure(
-          'No saved vehicles are available. Connect to load your vehicles.',
-        );
-      }
-
-      vehiclesFromCache = true;
-      _lastVehicles = saved;
-      _vehiclesOwner = owner;
-
-      return saved;
+      return _savedVehicles(owner);
     }
+  }
+
+  Future<List<Vehicle>?> readSavedVehicles() async {
+    final owner = _owner;
+    _checkOwner(owner);
+    if (_vehiclesOwner == owner && _lastVehicles != null) {
+      vehiclesFromCache = true;
+      return _lastVehicles;
+    }
+    if (owner == null) return null;
+    List<Vehicle>? saved;
+    try {
+      if (local != null && !kIsWeb) {
+        saved = await local!.getVehicles(owner);
+      } else {
+        final data = await store?.read('saved_vehicles');
+        if (data != null) {
+          saved = (data['vehicles'] as List)
+              .map((row) => Vehicle.fromMap(Map<String, dynamic>.from(row)))
+              .toList();
+        }
+      }
+    } catch (_) {
+      localSaveFailed = true;
+    }
+    _checkOwner(owner);
+    if (saved != null) vehiclesFromCache = true;
+    return saved;
+  }
+
+  Future<List<Vehicle>> _savedVehicles(String? owner) async {
+    final saved = await readSavedVehicles();
+    _checkOwner(owner);
+    if (saved == null) {
+      throw const ConnectionFailure(
+        'No saved vehicles are available. Connect to load your vehicles.',
+      );
+    }
+    vehiclesFromCache = true;
+    _lastVehicles = saved;
+    _vehiclesOwner = owner;
+    return saved;
   }
 
   Future<void> restorePendingChange({bool strict = false}) async {
@@ -244,9 +310,15 @@ class ProfileService {
       final vehicle = await store?.read('draft_add_vehicle');
       _checkOwner(owner);
 
+      final queued = await store?.read('profile_queue');
+      _checkOwner(owner);
+
       pendingChange = pending;
       profileDraft = profile;
       vehicleDraft = vehicle;
+      queuedChanges = (queued?['changes'] as List? ?? [])
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
     } catch (error) {
       if (error is AuthException || strict) rethrow;
       localSaveFailed = true;
@@ -325,10 +397,7 @@ class ProfileService {
     }
   }
 
-  Future<bool> _verify(
-    Map<String, dynamic> request,
-    String? owner,
-  ) async {
+  Future<bool> _verify(Map<String, dynamic> request, String? owner) async {
     if (request['kind'] == 'profile') {
       final profile = await repository.getProfile().timeout(requestTimeout);
       await _saveProfile(profile, owner);
@@ -342,9 +411,19 @@ class ProfileService {
 
   Future<void> _change(
     Map<String, dynamic> request,
-    Future<void> Function() send,
-  ) async {
+    Future<void> Function() send, {
+    bool replaying = false,
+  }) async {
+    final offline = await checkConnection() == false;
+    if (offline && request['kind'] == 'add_vehicle') {
+      throw const ConnectionFailure(
+        'Connect to the internet to save a vehicle. Your plate has not been registered.',
+      );
+    }
     if (store == null) {
+      if (offline) {
+        throw const ConnectionFailure('Connect to save your changes.');
+      }
       await send().timeout(requestTimeout);
       return;
     }
@@ -353,7 +432,8 @@ class ProfileService {
 
     await restorePendingChange(strict: true);
 
-    if (pendingChange != null &&
+    if (request['kind'] == 'add_vehicle' &&
+        pendingChange != null &&
         jsonEncode(pendingChange) != jsonEncode(request)) {
       throw const ConnectionFailure(
         'A previous change is still unconfirmed. Refresh and retry that change first.',
@@ -372,6 +452,36 @@ class ProfileService {
 
     _checkOwner(owner);
 
+    if (!replaying &&
+        queuedChanges.isNotEmpty &&
+        request['kind'] != 'add_vehicle') {
+      await _queueChange(request, owner);
+      if (!offline) {
+        try {
+          if (await syncPendingChanges()) return;
+        } catch (error) {
+          if (!isConnectionError(error)) rethrow;
+        }
+      }
+      throw const QueuedChange(
+        'Your change is saved on this device. It will be sent when you reconnect.',
+      );
+    }
+
+    if (offline) {
+      if (!replaying) await _queueChange(request, owner);
+      throw const QueuedChange(
+        'Your change is saved on this device. It will be sent when you reconnect.',
+      );
+    }
+
+    if (pendingChange != null &&
+        jsonEncode(pendingChange) != jsonEncode(request)) {
+      throw const ConnectionFailure(
+        'A previous change is still unconfirmed. Refresh and retry that change first.',
+      );
+    }
+
     try {
       if (await _verify(request, owner)) {
         await _clearPending(owner, request);
@@ -379,6 +489,13 @@ class ProfileService {
       }
     } catch (error) {
       if (!isConnectionError(error)) rethrow;
+
+      if (!replaying && request['kind'] != 'add_vehicle') {
+        await _queueChange(request, owner);
+        throw const QueuedChange(
+          'Your change is saved on this device. It will be sent when you reconnect.',
+        );
+      }
 
       throw ConnectionFailure(
         pendingChange == null
@@ -433,6 +550,13 @@ class ProfileService {
         if (!isConnectionError(checkError)) rethrow;
       }
 
+      if (!replaying && request['kind'] != 'add_vehicle') {
+        await _queueChange(request, owner);
+        throw const QueuedChange(
+          'Your change is pending confirmation. It will be checked when you reconnect.',
+        );
+      }
+
       throw const ConnectionFailure(
         'We could not confirm the change. Your input has been kept. Reconnect and refresh before retrying.',
       );
@@ -442,6 +566,83 @@ class ProfileService {
       await _clearPending(owner, request);
     } catch (_) {
       localSaveFailed = true;
+    }
+  }
+
+  Future<void> _queueChange(Map<String, dynamic> request, String? owner) async {
+    _checkOwner(owner);
+    final next = [...queuedChanges];
+    if (request['kind'] == 'profile' || request['kind'] == 'select_vehicle') {
+      next.removeWhere(
+        (saved) =>
+            saved['kind'] == request['kind'] &&
+            jsonEncode(saved) != jsonEncode(pendingChange),
+      );
+    }
+    if (!next.any((saved) => jsonEncode(saved) == jsonEncode(request))) {
+      next.add(Map.of(request));
+    }
+    await store!.write('profile_queue', {'changes': next});
+    _checkOwner(owner);
+    queuedChanges = next;
+  }
+
+  Future<bool> syncPendingChanges() async {
+    if (store == null || _syncing) return false;
+    _syncing = true;
+    final owner = _owner;
+    var changed = false;
+    try {
+      if (await checkConnection() == false) return false;
+      _checkOwner(owner);
+      await restorePendingChange(strict: true);
+      final pending = pendingChange;
+      if (pending != null && pending['kind'] != 'add_vehicle') {
+        await _change(
+          pending,
+          () => _sendStoredChange(pending),
+          replaying: true,
+        );
+        _checkOwner(owner);
+        changed = true;
+      }
+      while (queuedChanges.isNotEmpty) {
+        final request = queuedChanges.first;
+        await _change(
+          request,
+          () => _sendStoredChange(request),
+          replaying: true,
+        );
+        _checkOwner(owner);
+        final next = queuedChanges.skip(1).toList();
+        await store!.write('profile_queue', {'changes': next});
+        _checkOwner(owner);
+        queuedChanges = next;
+        changed = true;
+      }
+      return changed;
+    } finally {
+      _syncing = false;
+    }
+  }
+
+  Future<void> _sendStoredChange(Map<String, dynamic> request) async {
+    switch (request['kind']) {
+      case 'profile':
+        final owner = _owner;
+        final saved = await repository.updateProfile(
+          request['name'] as String,
+          request['email'] as String,
+        );
+        await _saveProfile(saved, owner);
+      case 'select_vehicle':
+        await repository.selectVehicle(request['id'] as String);
+      case 'delete_vehicle':
+        await repository.deleteVehicle(request['id'] as String);
+      default:
+        throw const ConnectionFailure(
+          'This saved change needs to be reviewed.',
+        );
     }
   }
 
@@ -456,16 +657,9 @@ class ProfileService {
     UserProfile? result;
 
     await _change(
-      {
-        'kind': 'profile',
-        'name': name.trim(),
-        'email': email.trim(),
-      },
+      {'kind': 'profile', 'name': name.trim(), 'email': email.trim()},
       () async {
-        result = await repository.updateProfile(
-          name.trim(),
-          email.trim(),
-        );
+        result = await repository.updateProfile(name.trim(), email.trim());
       },
     );
 
@@ -483,28 +677,25 @@ class ProfileService {
       throw UserInputException(error);
     }
 
-    await _change(
-      {
-        'kind': 'add_vehicle',
-        'type': type.value,
-        'plate': normalizePlate(plate),
-      },
-      () => repository.addVehicle(type, normalizePlate(plate)),
-    );
+    await _change({
+      'kind': 'add_vehicle',
+      'type': type.value,
+      'plate': normalizePlate(plate),
+    }, () => repository.addVehicle(type, normalizePlate(plate)));
   }
 
   Future<void> selectVehicle(String id) {
-    return _change(
-      {'kind': 'select_vehicle', 'id': id},
-      () => repository.selectVehicle(id),
-    );
+    return _change({
+      'kind': 'select_vehicle',
+      'id': id,
+    }, () => repository.selectVehicle(id));
   }
 
   Future<void> deleteVehicle(String id) {
-    return _change(
-      {'kind': 'delete_vehicle', 'id': id},
-      () => repository.deleteVehicle(id),
-    );
+    return _change({
+      'kind': 'delete_vehicle',
+      'id': id,
+    }, () => repository.deleteVehicle(id));
   }
 
   Future<void> signOut() => repository.signOut();
