@@ -122,7 +122,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (controller.loading)
+            if (controller.loading && profile == null)
               const Center(child: CircularProgressIndicator()),
             if (controller.notice != null) ...[
               ProfileNotice(
@@ -137,7 +137,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ProfileButton(text: 'Try again', onPressed: controller.load),
               const SizedBox(height: 16),
             ],
-            if (profile != null && !controller.loading) ...[
+            if (profile != null) ...[
               ProfileCard(
                 color: AppColors.lightPurple,
                 child: Column(

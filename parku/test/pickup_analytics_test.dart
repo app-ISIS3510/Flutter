@@ -238,7 +238,7 @@ void main() {
           pickupTime: suggested,
           suggestedPickupTime: suggested,
         ),
-        throwsA(isA<SocketException>()),
+        throwsA(isA<QueuedChange>()),
       );
       await analytics.flush();
       expect(remote.saved, isEmpty);

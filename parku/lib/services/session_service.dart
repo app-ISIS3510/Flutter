@@ -12,6 +12,7 @@ import '../repositories/session_repository.dart';
 import '../repositories/user_local_store.dart';
 import '../repositories/personal_data_repository.dart';
 import 'connection_failure.dart';
+import 'connectivity_service.dart';
 import 'pickup_analytics_service.dart';
 
 class SessionService {
@@ -21,6 +22,9 @@ class SessionService {
   final PersonalDataRepository? local;
   final PickupAnalyticsService? pickupAnalytics;
   final Duration requestTimeout;
+  final Future<bool?> Function() checkConnection;
+  final DateTime Function() currentTime;
+  bool _syncing = false;
   bool historySaveFailed = false;
   bool localSaveFailed = false;
   bool usingSavedSession = false;
@@ -36,15 +40,20 @@ class SessionService {
     this.local,
     this.pickupAnalytics,
     this.requestTimeout = const Duration(seconds: 8),
+    Future<bool?> Function()? checkConnection,
+    DateTime Function()? currentTime,
   }) : historyRepository =
-           historyRepository ?? SessionHistoryRepository(repository.client);
+           historyRepository ?? SessionHistoryRepository(repository.client),
+       checkConnection =
+           checkConnection ?? ConnectivityService().connectionStatus,
+       currentTime = currentTime ?? DateTime.now;
 
   String? get currentUserId => repository.client.auth.currentUser?.id;
   bool get historyAvailable => historyRepository.isAvailable;
 
   String? get notice {
     if (pendingRequest != null) {
-      return 'Your previous parking request is not confirmed. Refresh to check its status before retrying.';
+      return 'Your parking request is saved on this device. It will be checked when you reconnect. It is not confirmed yet.';
     }
     if (usingSavedSession) {
       return 'Showing your last confirmed parking data. Reconnect and refresh before making changes.';
@@ -82,6 +91,112 @@ class SessionService {
     final pending = await store?.read('session_request');
     _checkUser(owner);
     pendingRequest = pending;
+  }
+
+  Future<Never> _queueRequest(
+    Map<String, dynamic> request,
+    String owner, {
+    bool sent = false,
+  }) async {
+    if (store == null) {
+      throw const ConnectionFailure('Connect to send your parking request.');
+    }
+    await restorePendingRequest();
+    _checkUser(owner);
+    final previous = pendingRequest;
+    final sameSession =
+        previous?['session_id'] != null &&
+        previous?['session_id'] == request['session_id'];
+    final canReplace =
+        previous?['queued'] == true &&
+        sameSession &&
+        (request['kind'] == 'end' || previous?['kind'] == 'change');
+    if (previous != null && !_sameRequest(previous, request) && !canReplace) {
+      throw const ConnectionFailure(
+        'Another parking request is pending. Reconnect to confirm it first.',
+      );
+    }
+    final saved = previous != null && _sameRequest(previous, request)
+        ? previous
+        : {
+            ...request,
+            if (canReplace && previous?['previous_pickup_time'] != null)
+              'previous_pickup_time': previous!['previous_pickup_time'],
+            'queued': !sent,
+          };
+    await store!.write('session_request', saved);
+    _checkUser(owner);
+    pendingRequest = saved;
+    throw QueuedChange(
+      request['kind'] == 'end'
+          ? 'Your request is saved on this device and will be sent when you reconnect. Parking remains active until the server confirms it.'
+          : 'Your request is saved on this device. It will be sent when you reconnect. It is not confirmed yet.',
+    );
+  }
+
+  Future<bool> syncPendingRequest() async {
+    if (store == null || _syncing) return false;
+    _syncing = true;
+    final owner = _userId();
+    try {
+      if (await checkConnection() == false) return false;
+      _checkUser(owner);
+      await restorePendingRequest();
+      _checkUser(owner);
+      final request = pendingRequest;
+      if (request == null) return false;
+      if (_inFlight.containsKey(_requestKey(request, owner))) return false;
+      if (request['queued'] != true) {
+        if (await _recover(request, owner) != null) return true;
+      }
+      final pickup = DateTime.tryParse(request['pickup_time'] as String? ?? '');
+      if (pickup != null && !pickup.isAfter(currentTime())) {
+        await store!.remove('session_request');
+        _checkUser(owner);
+        pendingRequest = null;
+        throw const ConnectionFailure(
+          'Your saved pickup time has passed. Choose a new time before sending the request.',
+        );
+      }
+      switch (request['kind']) {
+        case 'start':
+          await startParking(
+            parkingId: request['parking_id'] as String,
+            vehicleId: request['vehicle_id'] as String,
+            pickupTime: pickup!,
+            parkingName: request['parking_name'] as String? ?? 'Parking stay',
+            suggestedPickupTime: DateTime.tryParse(
+              request['suggested_pickup_time'] as String? ?? '',
+            ),
+            replaying: true,
+          );
+        case 'change':
+          await changePickupTime(
+            sessionId: request['session_id'] as String,
+            pickupTime: pickup!,
+            parkingName: request['parking_name'] as String? ?? 'Parking stay',
+            replaying: true,
+          );
+        case 'end':
+          await endParking(
+            sessionId: request['session_id'] as String,
+            parkingName: request['parking_name'] as String? ?? 'Parking stay',
+            replaying: true,
+          );
+        default:
+          throw const ConnectionFailure(
+            'This saved parking request needs to be reviewed.',
+          );
+      }
+      return true;
+    } on QueuedChange {
+      return false;
+    } catch (error) {
+      if (isConnectionError(error)) return false;
+      rethrow;
+    } finally {
+      _syncing = false;
+    }
   }
 
   Future<void> savePickupDraft(String key, Map<String, dynamic> data) async {
@@ -265,6 +380,14 @@ class SessionService {
     _checkUser(owner);
     final pending = pendingRequest;
     if (pending == null) return null;
+    if (pending['queued'] == true) {
+      if (!_sameRequest(pending, next)) {
+        throw const ConnectionFailure(
+          'Another parking request is pending. Reconnect to confirm it first.',
+        );
+      }
+      return null;
+    }
     ParkingSession? confirmed;
     try {
       confirmed = await _recover(pending, owner);
@@ -301,9 +424,15 @@ class SessionService {
     Future<ParkingSession> Function() send,
   ) async {
     _checkUser(owner);
+    request = {...request, 'queued': false};
     await store?.write('session_request', request);
     _checkUser(owner);
     pendingRequest = request;
+    if (_inFlight.containsKey(_requestKey(request, owner))) {
+      throw const ConnectionFailure(
+        'The earlier parking request is still being processed.',
+      );
+    }
     ParkingSession session;
     try {
       final response = send();
@@ -334,9 +463,7 @@ class SessionService {
       } catch (checkError) {
         if (!isConnectionError(checkError)) rethrow;
       }
-      throw const ConnectionFailure(
-        'We could not confirm the parking request. Your selection has been kept. Reconnect and check its status before retrying.',
-      );
+      return _queueRequest(request, owner, sent: true);
     }
     return _confirm(session, request, owner);
   }
@@ -349,6 +476,7 @@ class SessionService {
     required String vehicleId,
     String parkingName = 'Parking stay',
     DateTime? suggestedPickupTime,
+    bool replaying = false,
   }) async {
     final owner = _userId();
     _stateVersion++;
@@ -362,47 +490,65 @@ class SessionService {
       if (suggestedPickupTime != null)
         'suggested_pickup_time': suggestedPickupTime.toUtc().toIso8601String(),
     };
-    if (store != null) {
-      final confirmed = await _checkPending(request, owner);
-      if (confirmed != null) return confirmed;
-      final active = await repository.getActiveSession().timeout(
-        requestTimeout,
+    if (await checkConnection() == false) {
+      if (!replaying) return _queueRequest(request, owner);
+      throw const QueuedChange(
+        'Your parking request is still saved on this device.',
       );
-      _checkUser(owner);
-      if (active != null) {
-        await _remember(active, owner);
-        throw const ConnectionFailure(
-          'You already have an active session. Open My parking to check it.',
+    }
+    try {
+      if (store != null) {
+        final confirmed = await _checkPending(request, owner);
+        if (confirmed != null) return confirmed;
+        final active = await repository.getActiveSession().timeout(
+          requestTimeout,
         );
-      }
-      if (pendingRequest == null) {
-        final known = await repository
-            .getMatchingSessions(
-              parkingId: parkingId,
-              vehicleId: vehicleId,
-              pickupTime: pickupTime,
-            )
-            .timeout(requestTimeout);
-        request['known_ids'] = known.map((session) => session.id).toList();
-      } else {
-        request['known_ids'] = pendingRequest!['known_ids'];
-        if (pendingRequest!.containsKey('suggested_pickup_time')) {
-          request['suggested_pickup_time'] =
-              pendingRequest!['suggested_pickup_time'];
+        _checkUser(owner);
+        if (active != null) {
+          await _remember(active, owner);
+          if (replaying) {
+            await store?.remove('session_request');
+            _checkUser(owner);
+            pendingRequest = null;
+          }
+          throw const ConnectionFailure(
+            'You already have an active session. Open My parking to check it.',
+          );
+        }
+        if (pendingRequest == null || pendingRequest?['queued'] == true) {
+          final known = await repository
+              .getMatchingSessions(
+                parkingId: parkingId,
+                vehicleId: vehicleId,
+                pickupTime: pickupTime,
+              )
+              .timeout(requestTimeout);
+          request['known_ids'] = known.map((session) => session.id).toList();
         } else {
-          request.remove('suggested_pickup_time');
+          request['known_ids'] = pendingRequest!['known_ids'];
+          if (pendingRequest!.containsKey('suggested_pickup_time')) {
+            request['suggested_pickup_time'] =
+                pendingRequest!['suggested_pickup_time'];
+          } else {
+            request.remove('suggested_pickup_time');
+          }
         }
       }
+      return await _send(
+        request,
+        owner,
+        () => repository.createSession(
+          parkingId: parkingId,
+          pickupTime: pickupTime,
+          vehicleId: vehicleId,
+        ),
+      );
+    } catch (error) {
+      if (!replaying && store != null && isConnectionError(error)) {
+        return _queueRequest(request, owner);
+      }
+      rethrow;
     }
-    return _send(
-      request,
-      owner,
-      () => repository.createSession(
-        parkingId: parkingId,
-        pickupTime: pickupTime,
-        vehicleId: vehicleId,
-      ),
-    );
   }
 
   Future<ParkingSession?> getActiveSession() async {
@@ -410,8 +556,11 @@ class SessionService {
     final owner = _userId();
     usingSavedSession = false;
     try {
-      pendingRequest = await store?.read('session_request');
-      if (pendingRequest != null) await _recover(pendingRequest!, owner);
+      await restorePendingRequest();
+      if (await checkConnection() == false) {
+        return await _savedActiveSession(owner);
+      }
+      if (pendingRequest != null) await syncPendingRequest();
       final version = _stateVersion;
       final session = await repository.getActiveSession().timeout(
         requestTimeout,
@@ -420,20 +569,24 @@ class SessionService {
       if (version == _stateVersion) await _remember(session, owner);
       return session;
     } catch (error) {
-      if (!isConnectionError(error) || store == null) rethrow;
-      final session = await getSavedActiveSession();
-      _checkUser(owner);
-      if (session == null) {
-        throw const ConnectionFailure(
-          'No confirmed active session is saved. Connect to check your parking status.',
-        );
+      if ((!isConnectionError(error) && error is! QueuedChange) ||
+          store == null) {
+        rethrow;
       }
-      if (session.userId != owner) {
-        throw const AuthException('Sign in to continue.');
-      }
-      usingSavedSession = true;
-      return session;
+      return await _savedActiveSession(owner);
     }
+  }
+
+  Future<ParkingSession?> _savedActiveSession(String owner) async {
+    final session = await getSavedActiveSession();
+    _checkUser(owner);
+    if (session == null && pendingRequest?['kind'] != 'start') {
+      throw const ConnectionFailure(
+        'No confirmed active session is saved. Connect to check your parking status.',
+      );
+    }
+    usingSavedSession = true;
+    return session;
   }
 
   /// Read the saved session without contacting the server.
@@ -463,6 +616,7 @@ class SessionService {
     required String sessionId,
     required DateTime pickupTime,
     String parkingName = 'Parking stay',
+    bool replaying = false,
   }) async {
     final owner = _userId();
     _stateVersion++;
@@ -473,47 +627,78 @@ class SessionService {
       'session_id': sessionId,
       'pickup_time': pickupTime.toUtc().toIso8601String(),
     };
-    if (store != null) {
-      final confirmed = await _checkPending(request, owner);
-      if (confirmed != null) return confirmed;
-      final current = await repository
-          .getSessionById(sessionId)
-          .timeout(requestTimeout);
-      _checkUser(owner);
-      if (current == null || current.status != 'active') {
-        throw const ConnectionFailure(
-          'This session is no longer active. Refresh My parking.',
-        );
-      }
-      final previous = pendingRequest?['previous_pickup_time'] as String?;
-      if (previous != null &&
-          !current.pickupTime.isAtSameMomentAs(DateTime.parse(previous))) {
-        await store?.remove('session_request');
-        pendingRequest = null;
-        throw const ConnectionFailure(
-          'The pickup time changed on the server. Refresh before choosing another time.',
-        );
-      }
-      request['previous_pickup_time'] = current.pickupTime
+    final savedSession = await getSavedActiveSession();
+    _checkUser(owner);
+    if (savedSession?.id == sessionId) {
+      request['previous_pickup_time'] = savedSession!.pickupTime
           .toUtc()
           .toIso8601String();
     }
-    return _send(
-      request,
-      owner,
-      () => repository.updatePickupTime(
-        sessionId: sessionId,
-        pickupTime: pickupTime,
-        previousPickupTime: request['previous_pickup_time'] == null
-            ? null
-            : DateTime.parse(request['previous_pickup_time'] as String),
-      ),
-    );
+    if (await checkConnection() == false) {
+      if (!replaying) {
+        return _queueRequest(request, owner);
+      }
+      throw const QueuedChange(
+        'Your parking request is still saved on this device.',
+      );
+    }
+    try {
+      if (store != null) {
+        final confirmed = await _checkPending(request, owner);
+        if (confirmed != null) return confirmed;
+        final current = await repository
+            .getSessionById(sessionId)
+            .timeout(requestTimeout);
+        _checkUser(owner);
+        if (current == null || current.status != 'active') {
+          if (replaying) {
+            await store?.remove('session_request');
+            _checkUser(owner);
+            pendingRequest = null;
+          }
+          throw const ConnectionFailure(
+            'This session is no longer active. Refresh My parking.',
+          );
+        }
+        final previous =
+            (pendingRequest?['previous_pickup_time'] ??
+                    request['previous_pickup_time'])
+                as String?;
+        if (previous != null &&
+            !current.pickupTime.isAtSameMomentAs(DateTime.parse(previous))) {
+          await store?.remove('session_request');
+          pendingRequest = null;
+          throw const ConnectionFailure(
+            'The pickup time changed on the server. Refresh before choosing another time.',
+          );
+        }
+        request['previous_pickup_time'] = current.pickupTime
+            .toUtc()
+            .toIso8601String();
+      }
+      return await _send(
+        request,
+        owner,
+        () => repository.updatePickupTime(
+          sessionId: sessionId,
+          pickupTime: pickupTime,
+          previousPickupTime: request['previous_pickup_time'] == null
+              ? null
+              : DateTime.parse(request['previous_pickup_time'] as String),
+        ),
+      );
+    } catch (error) {
+      if (!replaying && store != null && isConnectionError(error)) {
+        return _queueRequest(request, owner);
+      }
+      rethrow;
+    }
   }
 
   Future<ParkingSession> endParking({
     required String sessionId,
     String parkingName = 'Parking stay',
+    bool replaying = false,
   }) async {
     final owner = _userId();
     _stateVersion++;
@@ -524,27 +709,45 @@ class SessionService {
       'session_id': sessionId,
       'parking_name': parkingName,
     };
-    if (store != null) {
-      final confirmed = await _checkPending(request, owner);
-      if (confirmed != null) return confirmed;
-      final current = await repository
-          .getSessionById(sessionId)
-          .timeout(requestTimeout);
-      _checkUser(owner);
-      if (current?.status == 'completed') {
-        return _confirm(current!, request, owner, recovered: true);
-      }
-      if (current == null || current.status != 'active') {
-        throw const ConnectionFailure(
-          'This session is no longer available. Refresh My parking.',
-        );
-      }
+    if (await checkConnection() == false) {
+      if (!replaying) return _queueRequest(request, owner);
+      throw const QueuedChange(
+        'Your parking request is still saved on this device.',
+      );
     }
-    return _send(
-      request,
-      owner,
-      () => repository.endSession(sessionId: sessionId),
-    );
+    try {
+      if (store != null) {
+        final confirmed = await _checkPending(request, owner);
+        if (confirmed != null) return confirmed;
+        final current = await repository
+            .getSessionById(sessionId)
+            .timeout(requestTimeout);
+        _checkUser(owner);
+        if (current?.status == 'completed') {
+          return await _confirm(current!, request, owner, recovered: true);
+        }
+        if (current == null || current.status != 'active') {
+          if (replaying) {
+            await store?.remove('session_request');
+            _checkUser(owner);
+            pendingRequest = null;
+          }
+          throw const ConnectionFailure(
+            'This session is no longer available. Refresh My parking.',
+          );
+        }
+      }
+      return await _send(
+        request,
+        owner,
+        () => repository.endSession(sessionId: sessionId),
+      );
+    } catch (error) {
+      if (!replaying && store != null && isConnectionError(error)) {
+        return _queueRequest(request, owner);
+      }
+      rethrow;
+    }
   }
 
   Future<bool> hasActiveSession() =>

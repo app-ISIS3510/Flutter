@@ -140,7 +140,11 @@ void main() {
             events.add(jsonDecode(request.body) as Map<String, dynamic>);
           case '/rest/v1/bq9_pickup_time_choice_last_7_days':
             body = [
-              for (final entry in {'Suggested': 2, 'Manual': 1, 'Not recorded': 1}.entries)
+              for (final entry in {
+                'Suggested': 2,
+                'Manual': 1,
+                'Not recorded': 1,
+              }.entries)
                 {
                   'pickup_choice': entry.key,
                   'successful_starts': entry.value,
@@ -184,6 +188,8 @@ void main() {
           store: store,
           historyRepository: history,
           pickupAnalytics: analytics,
+          checkConnection: () async => online,
+          currentTime: () => DateTime(2026, 10, 29, 12),
         );
         final originalLocation = GeolocatorPlatform.instance;
         GeolocatorPlatform.instance = FakeLocationPlatform();
@@ -202,6 +208,7 @@ void main() {
               currentTime: () => DateTime(2026, 10, 29, 12),
               profileService: ProfileService(
                 SupabaseUserRepository(client),
+                checkConnection: () async => online,
                 store: store,
               ),
               sessionService: service,
@@ -275,14 +282,17 @@ void main() {
         await tester.ensureVisible(find.text('Change pickup time'));
         await tester.tap(find.text('Change pickup time'));
         await tester.pumpAndSettle();
-        expect(find.byType(MyParkingScreen), findsOneWidget);
-        expect(find.byType(ChangePickupTimeScreen), findsNothing);
-        expect(
-          find.text('Go online to change your pickup time.'),
-          findsOneWidget,
-        );
+        expect(find.byType(ChangePickupTimeScreen), findsOneWidget);
+        expect(find.text('Save pickup time'), findsOneWidget);
+        await tester.ensureVisible(find.text('Save pickup time'));
+        await tester.tap(find.text('Save pickup time'));
+        await tester.pumpAndSettle();
         expect(sessionRequests, requestsBefore);
+        expect(find.byType(MyParkingScreen), findsOneWidget);
+        expect((await store.read('session_request'))?['kind'], 'change');
         online = true;
+        await service.syncPendingRequest();
+        expect(await store.read('session_request'), isNull);
         tester
             .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger).first)
             .clearSnackBars();

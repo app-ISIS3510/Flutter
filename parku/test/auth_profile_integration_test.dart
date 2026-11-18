@@ -120,11 +120,12 @@ void main() {
   });
   tearDown(() async => Supabase.instance.dispose());
 
-  Widget app() {
+  Widget app({Future<bool?> Function()? checkConnection}) {
     final client = Supabase.instance.client;
     return ParkUApp(
       profileService: ProfileService(
         SupabaseUserRepository(client),
+        checkConnection: checkConnection ?? () async => true,
         store: UserLocalStore.memory(client),
       ),
     );
@@ -279,7 +280,7 @@ void main() {
   });
 
   testWidgets(
-    'offline Park here stays on details without loading profile or vehicles',
+    'offline Park here opens with the previously saved profile and vehicle',
     (tester) async {
       var online = true;
       const channel = MethodChannel('dev.fluttercommunity.plus/connectivity');
@@ -303,13 +304,23 @@ void main() {
           'completed_sessions': 8,
         },
       ];
-      await tester.pumpWidget(app());
+      vehicles = [
+        {
+          'id': 'vehicle-1',
+          'vehicle_type': 'motorcycle',
+          'plate': 'ABC12D',
+          'is_selected': true,
+        },
+      ];
+      await tester.pumpWidget(app(checkConnection: () async => online));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).at(0), 'juan@example.com');
       await tester.enterText(find.byType(TextField).at(1), 'test-password');
       await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
       await tester.pumpAndSettle();
       parkingAvailable = true;
+      await tapNavigation(tester, 'Profile');
+      await tester.pumpAndSettle();
       await tapNavigation(tester, 'Parking lots');
       await tester.ensureVisible(find.text('8 completed sessions'));
       await tester.tap(find.text('8 completed sessions'));
@@ -321,9 +332,8 @@ void main() {
       await tester.ensureVisible(find.text('Park here'));
       await tester.tap(find.text('Park here'));
       await tester.pumpAndSettle();
-      expect(find.text('Go online to start parking.'), findsOneWidget);
-      expect(find.byType(ParkingDetailScreen), findsOneWidget);
-      expect(find.byType(PickupTimeScreen), findsNothing);
+      expect(find.byType(PickupTimeScreen), findsOneWidget);
+      expect(find.text('ABC12D'), findsOneWidget);
       expect(profileRequests, requestsBefore);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());

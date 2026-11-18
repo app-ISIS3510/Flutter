@@ -18,6 +18,7 @@ class ProfileController extends ChangeNotifier {
   bool loading = false;
   bool isAdmin = false;
   bool busy = false;
+  bool changeQueued = false;
   String? error;
   int _version = 0;
   bool _disposed = false;
@@ -27,6 +28,9 @@ class ProfileController extends ChangeNotifier {
   Map<String, dynamic>? get profileDraft => service.profileDraft;
   Map<String, dynamic>? get vehicleDraft => service.vehicleDraft;
   String? get notice {
+    if (service.queuedChanges.isNotEmpty) {
+      return 'Changes saved on this device. They will be sent when you reconnect.';
+    }
     if (pendingChange != null) {
       return 'A previous change is not confirmed. Reconnect and refresh before retrying it.';
     }
@@ -71,6 +75,7 @@ class ProfileController extends ChangeNotifier {
     error = null;
     loading = false;
     busy = false;
+    changeQueued = false;
     isAdmin = false;
     _notify();
   }
@@ -84,6 +89,13 @@ class ProfileController extends ChangeNotifier {
     try {
       await service.restorePendingChange();
       if (version != _version) return;
+      final savedProfile = await service.readSavedProfile();
+      if (version != _version) return;
+      final savedVehicles = await service.readSavedVehicles();
+      if (version != _version) return;
+      profile = savedProfile ?? profile;
+      vehicles = savedVehicles ?? vehicles;
+      _notify();
       final user = await service.getProfile();
       if (version != _version) return;
       profile = user;
@@ -100,10 +112,18 @@ class ProfileController extends ChangeNotifier {
       }
       if (version != _version) return;
       isAdmin = adminStatus;
-      final savedVehicles = await service.getVehicles();
+      final currentVehicles = await service.getVehicles();
       if (version != _version) return;
-      vehicles = savedVehicles;
+      vehicles = currentVehicles;
       await service.checkPendingChange();
+      if (!service.usingSavedData && await service.syncPendingChanges()) {
+        final updatedProfile = await service.getProfile();
+        if (version != _version) return;
+        profile = updatedProfile;
+        final updatedVehicles = await service.getVehicles();
+        if (version != _version) return;
+        vehicles = updatedVehicles;
+      }
     } catch (e) {
       if (version == _version) error = messageFor(e);
     } finally {
@@ -120,6 +140,7 @@ class ProfileController extends ChangeNotifier {
   }) async {
     if (busy || loading || _disposed) return false;
     busy = true;
+    changeQueued = false;
     error = null;
     final version = _version;
     _notify();
@@ -136,6 +157,10 @@ class ProfileController extends ChangeNotifier {
           'Your change was saved, but the vehicle list could not be refreshed. Reconnect and refresh before choosing a vehicle.',
         );
       }
+      return true;
+    } on QueuedChange {
+      if (version != _version) return false;
+      changeQueued = true;
       return true;
     } catch (e) {
       if (version == _version) error = messageFor(e);
@@ -181,12 +206,12 @@ class ProfileController extends ChangeNotifier {
   }
 
   static String messageFor(Object error) {
-  if (error is ConnectionFailure) {
-    return error.message;
-  }
+    if (error is ConnectionFailure) {
+      return error.message;
+    }
 
-  return userErrorMessage(error, action: ErrorAction.profile);
-}
+    return userErrorMessage(error, action: ErrorAction.profile);
+  }
 
   @override
   void dispose() {
