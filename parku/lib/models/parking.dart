@@ -29,6 +29,20 @@ class Parking {
     required this.availableMotorcycleSpaces,
   });
 
+  Map<String, String> toDetailArguments() => {
+    'id': id,
+    'name': name,
+    'address': address,
+    'latitude': latitude?.toString() ?? '',
+    'longitude': longitude?.toString() ?? '',
+    'carSpaces': availableCarSpaces.toString(),
+    'motorcycleSpaces': availableMotorcycleSpaces.toString(),
+    'pricePerMinute': pricePerMinute.toString(),
+    'openingTime': openingTime ?? '',
+    'closingTime': closingTime ?? '',
+    'imageUrl': imageUrl ?? '',
+  };
+
   Map<String, dynamic> toMap() {
   return {
     'id': id,

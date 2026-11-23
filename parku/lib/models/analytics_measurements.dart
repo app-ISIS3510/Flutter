@@ -23,7 +23,10 @@ class ScreenLoadMeasurement {
       'load_status': failed ? 'error' : 'success',
       'cache_source': source,
       'is_from_cache':
-          source == 'memory' || source == 'sqlite' || source == 'mixed',
+          source == 'cache' ||
+          source == 'memory' ||
+          source == 'sqlite' ||
+          source == 'mixed',
     };
   }
 
@@ -38,15 +41,20 @@ class ScreenLoadMeasurement {
 class ParkingDetailVisit {
   final String id = newClientId();
   final String parkingId;
+  final String? searchId;
   bool _viewed = false;
 
-  ParkingDetailVisit(this.parkingId);
+  ParkingDetailVisit(this.parkingId, {this.searchId});
   bool get hasBeenViewed => _viewed;
 
   Map<String, dynamic>? markViewed() {
     if (_viewed) return null;
     _viewed = true;
-    return {'event_schema_version': 2, 'detail_view_id': id};
+    return {
+      'event_schema_version': 2,
+      'detail_view_id': id,
+      if (searchId != null) 'search_id': searchId,
+    };
   }
 
   Map<String, dynamic> favoriteMetadata(bool isFavorite) => {

@@ -12,6 +12,7 @@ class ParkingCard extends StatelessWidget {
   final int? availableSpaces;
   final int? totalSpaces;
   final bool isRecommended;
+  final Widget? comparisonAction;
 
   const ParkingCard({
     super.key,
@@ -24,6 +25,7 @@ class ParkingCard extends StatelessWidget {
     this.availableSpaces,
     this.totalSpaces,
     this.isRecommended = false,
+    this.comparisonAction,
   });
 
   @override
@@ -173,6 +175,7 @@ class ParkingCard extends StatelessWidget {
                       ),
                     ],
                   ],
+                  ?comparisonAction,
                 ],
               ),
             ),

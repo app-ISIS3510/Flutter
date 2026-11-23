@@ -2,23 +2,30 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../controllers/parking_controller.dart';
 import '../controllers/analytics_controller.dart';
-import '../utils/screen_load_reporter.dart';
+import '../controllers/parking_comparison_controller.dart';
+import '../controllers/parking_controller.dart';
+import '../models/analytics_measurements.dart';
 import '../models/parking.dart';
 import '../models/parking_search_result.dart';
 import '../theme/app_theme.dart';
+import '../utils/screen_load_reporter.dart';
 import '../widgets/navigation_bar.dart';
-import '../widgets/parking_card.dart';
 import '../widgets/offline_data_status_indicator.dart';
+import '../widgets/parking_card.dart';
+import '../widgets/parking_comparison_actions.dart';
 
 class SearchResultsScreen extends StatefulWidget {
   final String initialQuery;
   final int currentIndex;
   final ValueChanged<int> onNavTap;
-  final ValueChanged<Map<String, String>>? onSelectParking;
+  final void Function(Map<String, String> parking, {String? searchId})?
+  onSelectParking;
   final ParkingController parkingController;
   final AnalyticsController? analytics;
+  final ScreenLoadMeasurement? initialMeasurement;
+  final ParkingComparisonController? comparison;
+  final VoidCallback? onCompare;
 
   const SearchResultsScreen({
     super.key,
@@ -28,6 +35,9 @@ class SearchResultsScreen extends StatefulWidget {
     required this.parkingController,
     this.onSelectParking,
     this.analytics,
+    this.initialMeasurement,
+    this.comparison,
+    this.onCompare,
   });
 
   @override
@@ -47,29 +57,17 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   @override
   void initState() {
     super.initState();
-    _screenLoad = ScreenLoadReporter(widget.analytics, 'search_results');
+    _screenLoad = ScreenLoadReporter(
+      widget.analytics,
+      'search_results',
+      measurement: widget.initialMeasurement,
+    );
 
     _searchController = TextEditingController(text: widget.initialQuery);
 
     _resultsFuture = widget.parkingController.searchParkingLotsWithSource(
       widget.initialQuery,
     );
-  }
-
-  Map<String, String> _parkingToMap(Parking parking) {
-    return {
-      'id': parking.id,
-      'name': parking.name,
-      'address': parking.address,
-      'latitude': parking.latitude?.toString() ?? '',
-      'longitude': parking.longitude?.toString() ?? '',
-      'carSpaces': parking.availableCarSpaces.toString(),
-      'motorcycleSpaces': parking.availableMotorcycleSpaces.toString(),
-      'pricePerMinute': parking.pricePerMinute.toString(),
-      'openingTime': parking.openingTime ?? '',
-      'closingTime': parking.closingTime ?? '',
-      'imageUrl': parking.imageUrl ?? '',
-    };
   }
 
   String _parkingType(Parking parking) {
@@ -119,6 +117,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       _search(value);
       return;
     }
+    _screenLoad.cancel();
     setState(() => _isDebouncing = true);
     _searchDebounce = Timer(const Duration(milliseconds: 300), () {
       if (mounted) _search(value);
@@ -156,6 +155,8 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final comparison = widget.comparison;
+    final onCompare = widget.onCompare;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -167,6 +168,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                 child: FutureBuilder<ParkingSearchResult>(
                   future: _resultsFuture,
                   builder: (context, snapshot) {
+                    final screenLoad = _screenLoad;
                     final isLoading =
                         _isDebouncing ||
                         snapshot.connectionState == ConnectionState.waiting;
@@ -180,7 +182,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                     if (!isLoading &&
                         snapshot.connectionState == ConnectionState.done &&
                         _searchController.text.trim().isNotEmpty) {
-                      _screenLoad.presented(
+                      screenLoad.presented(
                         context,
                         source: snapshot.hasError
                             ? 'none'
@@ -188,6 +190,13 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                             ? 'cache'
                             : 'network',
                         failed: snapshot.hasError,
+                        metadata: hasResults && !snapshot.hasError
+                            ? {
+                                'search_id': screenLoad.id,
+                                'search_method': 'text',
+                                'result_count': parkingLots.length,
+                              }
+                            : null,
                       );
                     }
 
@@ -361,11 +370,18 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                                 name: parking.name,
                                 address: parking.address,
                                 type: _parkingType(parking),
+                                comparisonAction: comparison == null
+                                    ? null
+                                    : ParkingComparisonToggle(
+                                        controller: comparison,
+                                        parking: parking,
+                                      ),
                                 onTap: widget.onSelectParking == null
                                     ? null
                                     : () {
                                         widget.onSelectParking!(
-                                          _parkingToMap(parking),
+                                          parking.toDetailArguments(),
+                                          searchId: screenLoad.presentedId,
                                         );
                                       },
                               ),
@@ -465,6 +481,11 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
               ),
             ),
 
+            if (comparison != null && onCompare != null)
+              ParkingComparisonBar(
+                controller: comparison,
+                onCompare: onCompare,
+              ),
             NavBar(currentIndex: widget.currentIndex, onTap: widget.onNavTap),
           ],
         ),
