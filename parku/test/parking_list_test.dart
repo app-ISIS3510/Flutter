@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:parku/controllers/parking_comparison_controller.dart';
 import 'package:parku/controllers/parking_controller.dart';
 import 'package:parku/repositories/parking_repository.dart';
 import 'package:parku/screens/parking_list.dart';
@@ -107,6 +108,8 @@ void main() {
     WidgetTester tester, {
     Size size = const Size(390, 844),
     double textScale = 1,
+    ParkingComparisonController? comparison,
+    VoidCallback? onCompare,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -124,6 +127,8 @@ void main() {
           onNavTap: (_) {},
           controller: controller,
           onSelectParking: (parking) => selectedParking = parking,
+          comparison: comparison,
+          onCompare: onCompare,
         ),
       ),
     );
@@ -170,6 +175,35 @@ void main() {
     await tester.pumpAndSettle();
     await scrollTo(tester, find.text('City U Parking'), 200);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('catalog cards add to the shared comparison selection', (
+    tester,
+  ) async {
+    rows.add(parkingData(id: 'parking-2', name: 'Library Parking'));
+    final comparison = ParkingComparisonController();
+    addTearDown(comparison.dispose);
+    var opened = false;
+    await openList(
+      tester,
+      comparison: comparison,
+      onCompare: () => opened = true,
+    );
+    await tester.pumpAndSettle();
+
+    for (final name in ['City U Parking', 'Library Parking']) {
+      final action = find.byTooltip('Add $name to comparison');
+      await scrollTo(tester, action, 200);
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+    }
+    expect(comparison.selection.map((parking) => parking.id), [
+      'parking-1',
+      'parking-2',
+    ]);
+    expect(selectedParking, isNull);
+    await tester.tap(find.widgetWithText(FilledButton, 'Compare'));
+    expect(opened, isTrue);
   });
 
   testWidgets(

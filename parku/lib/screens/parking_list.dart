@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 
 import '../controllers/analytics_controller.dart';
+import '../controllers/parking_comparison_controller.dart';
 import '../controllers/parking_controller.dart';
 import '../models/most_used_parking.dart';
 import '../models/most_used_parking_ranking.dart';
@@ -16,8 +17,9 @@ import '../theme/app_theme.dart';
 import '../utils/screen_load_reporter.dart';
 import '../widgets/most_used_parking_section.dart';
 import '../widgets/navigation_bar.dart';
-import '../widgets/parking_card.dart';
 import '../widgets/offline_data_status_indicator.dart';
+import '../widgets/parking_card.dart';
+import '../widgets/parking_comparison_actions.dart';
 
 class ParkingListScreen extends StatefulWidget {
   final int currentIndex;
@@ -26,6 +28,8 @@ class ParkingListScreen extends StatefulWidget {
   final VoidCallback? onSearchTap;
   final ParkingController controller;
   final AnalyticsController? analytics;
+  final ParkingComparisonController? comparison;
+  final VoidCallback? onCompare;
 
   const ParkingListScreen({
     super.key,
@@ -35,6 +39,8 @@ class ParkingListScreen extends StatefulWidget {
     this.onSelectParking,
     this.onSearchTap,
     this.analytics,
+    this.comparison,
+    this.onCompare,
   });
 
   @override
@@ -303,7 +309,7 @@ class _ParkingListScreenState extends State<ParkingListScreen>
         return;
       }
 
-      widget.onSelectParking!(_parkingToMap(parking));
+      widget.onSelectParking!(parking.toDetailArguments());
     } catch (_) {
       if (!mounted) return;
 
@@ -319,22 +325,6 @@ class _ParkingListScreenState extends State<ParkingListScreen>
         setState(() => _openingParkingId = null);
       }
     }
-  }
-
-  Map<String, String> _parkingToMap(Parking parking) {
-    return {
-      'id': parking.id,
-      'imageUrl': parking.imageUrl ?? '',
-      'name': parking.name,
-      'address': parking.address,
-      'latitude': parking.latitude?.toString() ?? '',
-      'longitude': parking.longitude?.toString() ?? '',
-      'carSpaces': parking.availableCarSpaces.toString(),
-      'motorcycleSpaces': parking.availableMotorcycleSpaces.toString(),
-      'pricePerMinute': parking.pricePerMinute.toString(),
-      'openingTime': parking.openingTime ?? '',
-      'closingTime': parking.closingTime ?? '',
-    };
   }
 
   Widget _buildRadiusButton(int radius, String label, bool loading) {
@@ -483,9 +473,10 @@ class _ParkingListScreenState extends State<ParkingListScreen>
         availableSpaces: result.availableSpaces,
         totalSpaces: result.totalSpaces,
         isRecommended: result.isRecommended,
+        comparisonAction: _comparisonAction(parking),
         onTap: widget.onSelectParking == null
             ? null
-            : () => widget.onSelectParking!(_parkingToMap(parking)),
+            : () => widget.onSelectParking!(parking.toDetailArguments()),
       ),
     );
   }
@@ -499,11 +490,18 @@ class _ParkingListScreenState extends State<ParkingListScreen>
         type:
             '${parking.carSpaces} car spaces · '
             '${parking.motorcycleSpaces} motorcycle spaces',
+        comparisonAction: _comparisonAction(parking),
         onTap: widget.onSelectParking == null
             ? null
-            : () => widget.onSelectParking!(_parkingToMap(parking)),
+            : () => widget.onSelectParking!(parking.toDetailArguments()),
       ),
     );
+  }
+
+  Widget? _comparisonAction(Parking parking) {
+    final comparison = widget.comparison;
+    if (comparison == null) return null;
+    return ParkingComparisonToggle(controller: comparison, parking: parking);
   }
 
   Widget _buildHeader(bool loading, String? locationNotice) {
@@ -627,6 +625,8 @@ class _ParkingListScreenState extends State<ParkingListScreen>
 
   @override
   Widget build(BuildContext context) {
+    final comparison = widget.comparison;
+    final onCompare = widget.onCompare;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -761,6 +761,11 @@ class _ParkingListScreenState extends State<ParkingListScreen>
                 },
               ),
             ),
+            if (comparison != null && onCompare != null)
+              ParkingComparisonBar(
+                controller: comparison,
+                onCompare: onCompare,
+              ),
             const SizedBox(height: 10),
             NavBar(currentIndex: widget.currentIndex, onTap: widget.onNavTap),
           ],

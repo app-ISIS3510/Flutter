@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../controllers/analytics_controller.dart';
+import '../controllers/parking_comparison_controller.dart';
 import '../controllers/parking_controller.dart';
 import '../models/analytics_measurements.dart';
 import '../models/parking.dart';
@@ -12,6 +13,7 @@ import '../utils/screen_load_reporter.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/offline_data_status_indicator.dart';
 import '../widgets/parking_card.dart';
+import '../widgets/parking_comparison_actions.dart';
 
 class SearchResultsScreen extends StatefulWidget {
   final String initialQuery;
@@ -22,6 +24,8 @@ class SearchResultsScreen extends StatefulWidget {
   final ParkingController parkingController;
   final AnalyticsController? analytics;
   final ScreenLoadMeasurement? initialMeasurement;
+  final ParkingComparisonController? comparison;
+  final VoidCallback? onCompare;
 
   const SearchResultsScreen({
     super.key,
@@ -32,6 +36,8 @@ class SearchResultsScreen extends StatefulWidget {
     this.onSelectParking,
     this.analytics,
     this.initialMeasurement,
+    this.comparison,
+    this.onCompare,
   });
 
   @override
@@ -62,22 +68,6 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     _resultsFuture = widget.parkingController.searchParkingLotsWithSource(
       widget.initialQuery,
     );
-  }
-
-  Map<String, String> _parkingToMap(Parking parking) {
-    return {
-      'id': parking.id,
-      'name': parking.name,
-      'address': parking.address,
-      'latitude': parking.latitude?.toString() ?? '',
-      'longitude': parking.longitude?.toString() ?? '',
-      'carSpaces': parking.availableCarSpaces.toString(),
-      'motorcycleSpaces': parking.availableMotorcycleSpaces.toString(),
-      'pricePerMinute': parking.pricePerMinute.toString(),
-      'openingTime': parking.openingTime ?? '',
-      'closingTime': parking.closingTime ?? '',
-      'imageUrl': parking.imageUrl ?? '',
-    };
   }
 
   String _parkingType(Parking parking) {
@@ -165,6 +155,8 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final comparison = widget.comparison;
+    final onCompare = widget.onCompare;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -378,11 +370,17 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                                 name: parking.name,
                                 address: parking.address,
                                 type: _parkingType(parking),
+                                comparisonAction: comparison == null
+                                    ? null
+                                    : ParkingComparisonToggle(
+                                        controller: comparison,
+                                        parking: parking,
+                                      ),
                                 onTap: widget.onSelectParking == null
                                     ? null
                                     : () {
                                         widget.onSelectParking!(
-                                          _parkingToMap(parking),
+                                          parking.toDetailArguments(),
                                           searchId: screenLoad.presentedId,
                                         );
                                       },
@@ -483,6 +481,11 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
               ),
             ),
 
+            if (comparison != null && onCompare != null)
+              ParkingComparisonBar(
+                controller: comparison,
+                onCompare: onCompare,
+              ),
             NavBar(currentIndex: widget.currentIndex, onTap: widget.onNavTap),
           ],
         ),

@@ -9,6 +9,7 @@ import '../controllers/analytics_controller.dart';
 import '../controllers/connection_controller.dart';
 import '../controllers/favorite_controller.dart';
 import '../controllers/navigation_controller.dart';
+import '../controllers/parking_comparison_controller.dart';
 import '../controllers/parking_controller.dart';
 import '../controllers/profile_controller.dart';
 import '../controllers/session_controller.dart';
@@ -50,6 +51,7 @@ import 'home.dart';
 import 'my_parking.dart';
 import 'no_active_parking.dart';
 import 'no_favorites.dart';
+import 'parking_comparison.dart';
 import 'parking_detail.dart';
 import 'parking_list.dart';
 import 'pickup_time.dart';
@@ -89,6 +91,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   late final ParkingRepository parkingRepository;
   late final ParkingService parkingService;
   late final ParkingController parkingController;
+  final parkingComparison = ParkingComparisonController();
 
   late final SessionRepository sessionRepository;
   late final SessionService sessionService;
@@ -130,6 +133,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   bool showingMyParking = false;
   bool isLoadingSession = false;
   bool isOpeningSearch = false;
+  bool _isOpeningComparison = false;
   bool _isOpeningPickup = false;
   bool _isOpeningPickupChange = false;
 
@@ -275,6 +279,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         _myParkingRequestVersion++;
         _favoritesRequestVersion++;
         _removingFavoriteIds.clear();
+        parkingComparison.clear();
 
         profileController.clear();
         sessionController.clear();
@@ -429,6 +434,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
     _authSubscription?.cancel();
     profileController.dispose();
+    parkingComparison.dispose();
     sessionController.dispose();
     sessionState.dispose();
 
@@ -736,6 +742,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                       parkingController: parkingController,
                       onNavTap: _profileNavTap,
                       onSelectParking: openParkingDetail,
+                      comparison: parkingComparison,
+                      onCompare: _openParkingComparison,
                     ),
                   ),
                 );
@@ -750,6 +758,29 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       }
     } finally {
       isOpeningSearch = false;
+    }
+  }
+
+  Future<void> _openParkingComparison() async {
+    if (_isOpeningComparison ||
+        !_sameUser(_userId) ||
+        !parkingComparison.canCompare) {
+      return;
+    }
+
+    _isOpeningComparison = true;
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => ParkingComparisonScreen(
+            controller: parkingComparison,
+            onOpenDetails: (parking) =>
+                openParkingDetail(parking.toDetailArguments()),
+          ),
+        ),
+      );
+    } finally {
+      _isOpeningComparison = false;
     }
   }
 
@@ -1376,6 +1407,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
           controller: parkingController,
           onSelectParking: openParkingDetail,
           onSearchTap: openSearch,
+          comparison: parkingComparison,
+          onCompare: _openParkingComparison,
           analytics: analyticsController,
         );
 
