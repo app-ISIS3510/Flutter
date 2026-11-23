@@ -2,23 +2,26 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../controllers/parking_controller.dart';
 import '../controllers/analytics_controller.dart';
-import '../utils/screen_load_reporter.dart';
+import '../controllers/parking_controller.dart';
+import '../models/analytics_measurements.dart';
 import '../models/parking.dart';
 import '../models/parking_search_result.dart';
 import '../theme/app_theme.dart';
+import '../utils/screen_load_reporter.dart';
 import '../widgets/navigation_bar.dart';
-import '../widgets/parking_card.dart';
 import '../widgets/offline_data_status_indicator.dart';
+import '../widgets/parking_card.dart';
 
 class SearchResultsScreen extends StatefulWidget {
   final String initialQuery;
   final int currentIndex;
   final ValueChanged<int> onNavTap;
-  final ValueChanged<Map<String, String>>? onSelectParking;
+  final void Function(Map<String, String> parking, {String? searchId})?
+  onSelectParking;
   final ParkingController parkingController;
   final AnalyticsController? analytics;
+  final ScreenLoadMeasurement? initialMeasurement;
 
   const SearchResultsScreen({
     super.key,
@@ -28,6 +31,7 @@ class SearchResultsScreen extends StatefulWidget {
     required this.parkingController,
     this.onSelectParking,
     this.analytics,
+    this.initialMeasurement,
   });
 
   @override
@@ -47,7 +51,11 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   @override
   void initState() {
     super.initState();
-    _screenLoad = ScreenLoadReporter(widget.analytics, 'search_results');
+    _screenLoad = ScreenLoadReporter(
+      widget.analytics,
+      'search_results',
+      measurement: widget.initialMeasurement,
+    );
 
     _searchController = TextEditingController(text: widget.initialQuery);
 
@@ -119,6 +127,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       _search(value);
       return;
     }
+    _screenLoad.cancel();
     setState(() => _isDebouncing = true);
     _searchDebounce = Timer(const Duration(milliseconds: 300), () {
       if (mounted) _search(value);
@@ -167,6 +176,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                 child: FutureBuilder<ParkingSearchResult>(
                   future: _resultsFuture,
                   builder: (context, snapshot) {
+                    final screenLoad = _screenLoad;
                     final isLoading =
                         _isDebouncing ||
                         snapshot.connectionState == ConnectionState.waiting;
@@ -180,7 +190,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                     if (!isLoading &&
                         snapshot.connectionState == ConnectionState.done &&
                         _searchController.text.trim().isNotEmpty) {
-                      _screenLoad.presented(
+                      screenLoad.presented(
                         context,
                         source: snapshot.hasError
                             ? 'none'
@@ -188,6 +198,13 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                             ? 'cache'
                             : 'network',
                         failed: snapshot.hasError,
+                        metadata: hasResults && !snapshot.hasError
+                            ? {
+                                'search_id': screenLoad.id,
+                                'search_method': 'text',
+                                'result_count': parkingLots.length,
+                              }
+                            : null,
                       );
                     }
 
@@ -366,6 +383,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                                     : () {
                                         widget.onSelectParking!(
                                           _parkingToMap(parking),
+                                          searchId: screenLoad.presentedId,
                                         );
                                       },
                               ),

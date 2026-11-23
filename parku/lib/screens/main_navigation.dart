@@ -707,7 +707,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
               onSelectParking: openParkingDetail,
               onNavTap: _profileNavTap,
               onSearch: (query) {
-                if (query.trim().isNotEmpty) {
+                final measurement = query.trim().isEmpty
+                    ? null
+                    : ScreenLoadMeasurement();
+                if (measurement != null) {
                   unawaited(
                     analyticsController
                         .track(
@@ -728,6 +731,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                     builder: (_) => SearchResultsScreen(
                       analytics: analyticsController,
                       initialQuery: query,
+                      initialMeasurement: measurement,
                       currentIndex: 1,
                       parkingController: parkingController,
                       onNavTap: _profileNavTap,
@@ -749,14 +753,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     }
   }
 
-  Future<void> openParkingDetail(Map<String, String> parking) async {
+  Future<void> openParkingDetail(
+    Map<String, String> parking, {
+    String? searchId,
+  }) async {
     final parkingId = parking['id'];
 
     if (parkingId == null || parkingId.isEmpty) return;
     if (!_sameUser(_userId)) return;
 
     final detailUserId = _userId;
-    final detailVisit = ParkingDetailVisit(parkingId);
+    final detailVisit = ParkingDetailVisit(parkingId, searchId: searchId);
 
     final favoriteStatus = ValueNotifier<FavoriteStatusState>(
       const FavoriteStatusState(isBusy: true),

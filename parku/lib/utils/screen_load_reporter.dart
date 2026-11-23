@@ -21,10 +21,16 @@ class ScreenLoadReporter with WidgetsBindingObserver {
     this.screen, {
     this.parkingId,
     String trigger = 'navigation',
+    ScreenLoadMeasurement? measurement,
   }) : _userId = analytics?.currentUserId,
-       _measurement = ScreenLoadMeasurement(trigger: trigger) {
+       _measurement = measurement ?? ScreenLoadMeasurement(trigger: trigger) {
     if (analytics != null) WidgetsBinding.instance.addObserver(this);
   }
+
+  String get id => _measurement.id;
+
+  String? get presentedId =>
+      _completed && analytics?.currentUserId == _userId ? id : null;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -39,6 +45,7 @@ class ScreenLoadReporter with WidgetsBindingObserver {
     BuildContext context, {
     required String source,
     bool failed = false,
+    Map<String, dynamic>? metadata,
   }) {
     if (_scheduled || _cancelled || _completed || analytics == null) return;
     final route = ModalRoute.of(context);
@@ -67,7 +74,7 @@ class ScreenLoadReporter with WidgetsBindingObserver {
                   : 'screen_load_completed',
               screen: screen,
               parkingId: parkingId,
-              metadata: data,
+              metadata: {...?metadata, ...data},
             )
             .catchError((Object error, StackTrace stack) {
               developer.log(
