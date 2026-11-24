@@ -21,6 +21,8 @@ import 'package:parku/screens/my_parking.dart';
 import 'package:parku/services/pickup_analytics_service.dart';
 import 'package:parku/services/profile_service.dart';
 import 'package:parku/services/session_service.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'support/memory_auth_storage.dart';
@@ -60,6 +62,8 @@ void main() {
 
   setUp(() async {
     useUnavailableSqlite();
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.empty();
     online = true;
     showParking = false;
     sessionRequests = 0;
@@ -174,7 +178,7 @@ void main() {
 
   for (final size in [const Size(390, 844), const Size(320, 568)]) {
     testWidgets(
-      'the visible parking flow records BQ9 and opens an offline summary at ${size.width}',
+      'the parking flow opens the planner, records BQ9 and opens a summary at ${size.width}',
       (tester) async {
         final client = Supabase.instance.client;
         final store = UserLocalStore.memory(client);
@@ -236,6 +240,13 @@ void main() {
           isNull,
           reason: 'Parking details layout',
         );
+        await tester.ensureVisible(find.text('Estimate parking cost'));
+        await tester.tap(find.text('Estimate parking cost'));
+        await tester.pumpAndSettle();
+        expect(find.text('Parking Budget Planner'), findsOneWidget);
+        expect(tester.takeException(), isNull, reason: 'Budget planner layout');
+        await tester.pageBack();
+        await tester.pumpAndSettle();
         await tester.ensureVisible(find.text('Park here'));
         await tester.tap(find.text('Park here'));
         await waitForScreen(

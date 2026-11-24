@@ -22,6 +22,7 @@ class ParkingDetailScreen extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onNavTap;
   final ValueChanged<Parking> onParkHere;
+  final ValueChanged<ParkingDetailState> onOpenBudgetPlanner;
   final bool isFavorite;
   final VoidCallback? onToggleFavorite;
   final ParkingController parkingController;
@@ -37,6 +38,7 @@ class ParkingDetailScreen extends StatefulWidget {
     required this.currentIndex,
     required this.onNavTap,
     required this.onParkHere,
+    required this.onOpenBudgetPlanner,
     required this.isFavorite,
     required this.onToggleFavorite,
     required this.navigationController,
@@ -481,6 +483,14 @@ class _ParkingDetailScreenState extends State<ParkingDetailScreen> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: _SecondaryButton(
+                        text: 'Estimate parking cost',
+                        onPressed: () => widget.onOpenBudgetPlanner(state),
+                      ),
                     ),
                     const SizedBox(height: 16),
                     const Text(

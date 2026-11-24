@@ -51,6 +51,7 @@ import 'home.dart';
 import 'my_parking.dart';
 import 'no_active_parking.dart';
 import 'no_favorites.dart';
+import 'parking_budget_planner.dart';
 import 'parking_comparison.dart';
 import 'parking_detail.dart';
 import 'parking_list.dart';
@@ -950,6 +951,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                   onNavTap: (index) {
                     _returnToMain();
                     changePage(index);
+                  },
+                  onOpenBudgetPlanner: (details) {
+                    if (!context.mounted || !_sameUser(detailUserId)) return;
+                    Navigator.push<void>(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => ParkingBudgetPlannerScreen(
+                          details: details,
+                          userId: detailUserId!,
+                        ),
+                      ),
+                    );
                   },
                   onParkHere: (selectedParking) {
                     openPickupTime({
