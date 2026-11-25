@@ -3,8 +3,15 @@ import 'parking.dart';
 class SmartParkingResults {
   final List<SmartParkingResult> items;
   final String? locationNotice;
+  final DateTime? updatedAt;
+  final bool isFromCache;
 
-  const SmartParkingResults({required this.items, this.locationNotice});
+  const SmartParkingResults({
+    required this.items,
+    this.locationNotice,
+    this.updatedAt,
+    this.isFromCache = false,
+  });
 }
 
 class SmartParkingResult {

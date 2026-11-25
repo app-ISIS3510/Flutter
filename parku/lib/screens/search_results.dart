@@ -375,6 +375,8 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                                     : ParkingComparisonToggle(
                                         controller: comparison,
                                         parking: parking,
+                                        updatedAt: searchResult?.updatedAt,
+                                        isFromCache: isFromCache,
                                       ),
                                 onTap: widget.onSelectParking == null
                                     ? null

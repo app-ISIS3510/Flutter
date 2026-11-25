@@ -7,11 +7,15 @@ import '../theme/app_theme.dart';
 class ParkingComparisonToggle extends StatelessWidget {
   final ParkingComparisonController controller;
   final Parking parking;
+  final DateTime? updatedAt;
+  final bool isFromCache;
 
   const ParkingComparisonToggle({
     super.key,
     required this.controller,
     required this.parking,
+    this.updatedAt,
+    this.isFromCache = false,
   });
 
   @override
@@ -25,7 +29,11 @@ class ParkingComparisonToggle extends StatelessWidget {
             : 'Add ${parking.name} to comparison',
         child: TextButton.icon(
           onPressed: selected || controller.hasCapacity
-              ? () => controller.toggle(parking)
+              ? () => controller.toggle(
+                  parking,
+                  updatedAt: updatedAt,
+                  isFromCache: isFromCache,
+                )
               : null,
           style: TextButton.styleFrom(foregroundColor: AppColors.primary),
           icon: Icon(
@@ -54,7 +62,10 @@ class ParkingComparisonBar extends StatelessWidget {
     listenable: controller,
     builder: (context, _) {
       final count = controller.count;
-      if (count == 0) return const SizedBox.shrink();
+      final status = controller.restoring
+          ? 'Restoring comparison…'
+          : controller.storageError;
+      if (count == 0 && status == null) return const SizedBox.shrink();
 
       return Container(
         margin: const EdgeInsets.fromLTRB(16, 4, 16, 6),
@@ -68,21 +79,37 @@ class ParkingComparisonBar extends StatelessWidget {
             Expanded(
               child: Semantics(
                 liveRegion: true,
-                child: Text(
-                  '$count of ${ParkingComparisonController.maxSelection} selected',
-                  style: const TextStyle(
-                    color: AppColors.darkText,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (count > 0)
+                      Text(
+                        '$count of ${ParkingComparisonController.maxSelection} selected',
+                        style: const TextStyle(
+                          color: AppColors.darkText,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    if (status != null)
+                      Text(
+                        status,
+                        style: const TextStyle(color: AppColors.greyText),
+                      ),
+                  ],
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            FilledButton(
-              onPressed: controller.canCompare ? onCompare : null,
-              style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
-              child: const Text('Compare'),
-            ),
+            if (count > 0) ...[
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: controller.canCompare ? onCompare : null,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                ),
+                child: const Text('Compare'),
+              ),
+            ],
           ],
         ),
       );
