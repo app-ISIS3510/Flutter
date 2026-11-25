@@ -457,7 +457,10 @@ class _ParkingListScreenState extends State<ParkingListScreen>
     );
   }
 
-  Widget _buildParkingCard(SmartParkingResult result) {
+  Widget _buildParkingCard(
+    SmartParkingResult result,
+    SmartParkingResults data,
+  ) {
     final parking = result.parking;
 
     return Padding(
@@ -473,7 +476,11 @@ class _ParkingListScreenState extends State<ParkingListScreen>
         availableSpaces: result.availableSpaces,
         totalSpaces: result.totalSpaces,
         isRecommended: result.isRecommended,
-        comparisonAction: _comparisonAction(parking),
+        comparisonAction: _comparisonAction(
+          parking,
+          updatedAt: data.updatedAt,
+          isFromCache: data.isFromCache,
+        ),
         onTap: widget.onSelectParking == null
             ? null
             : () => widget.onSelectParking!(parking.toDetailArguments()),
@@ -481,7 +488,7 @@ class _ParkingListScreenState extends State<ParkingListScreen>
     );
   }
 
-  Widget _buildCatalogCard(Parking parking) {
+  Widget _buildCatalogCard(Parking parking, ParkingListState catalog) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: ParkingCard(
@@ -490,7 +497,11 @@ class _ParkingListScreenState extends State<ParkingListScreen>
         type:
             '${parking.carSpaces} car spaces · '
             '${parking.motorcycleSpaces} motorcycle spaces',
-        comparisonAction: _comparisonAction(parking),
+        comparisonAction: _comparisonAction(
+          parking,
+          updatedAt: catalog.updatedAt,
+          isFromCache: catalog.isFromCache,
+        ),
         onTap: widget.onSelectParking == null
             ? null
             : () => widget.onSelectParking!(parking.toDetailArguments()),
@@ -498,10 +509,19 @@ class _ParkingListScreenState extends State<ParkingListScreen>
     );
   }
 
-  Widget? _comparisonAction(Parking parking) {
+  Widget? _comparisonAction(
+    Parking parking, {
+    required DateTime? updatedAt,
+    required bool isFromCache,
+  }) {
     final comparison = widget.comparison;
     if (comparison == null) return null;
-    return ParkingComparisonToggle(controller: comparison, parking: parking);
+    return ParkingComparisonToggle(
+      controller: comparison,
+      parking: parking,
+      updatedAt: updatedAt,
+      isFromCache: isFromCache,
+    );
   }
 
   Widget _buildHeader(bool loading, String? locationNotice) {
@@ -752,8 +772,8 @@ class _ParkingListScreenState extends State<ParkingListScreen>
                           }
 
                           return useCatalog
-                              ? _buildCatalogCard(lots[index - 1])
-                              : _buildParkingCard(results[index - 1]);
+                              ? _buildCatalogCard(lots[index - 1], catalog!)
+                              : _buildParkingCard(results[index - 1], data!);
                         },
                       );
                     },

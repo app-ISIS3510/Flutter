@@ -14,6 +14,8 @@ import '../controllers/parking_controller.dart';
 import '../controllers/profile_controller.dart';
 import '../controllers/session_controller.dart';
 import '../data/local/analytics_local_data_source.dart';
+import '../data/local/parking_comparison_store_stub.dart'
+    if (dart.library.io) '../data/local/parking_comparison_store_native.dart';
 import '../models/analytics_measurements.dart';
 import '../models/parking.dart';
 import '../models/parking_session.dart';
@@ -91,7 +93,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   late final ParkingRepository parkingRepository;
   late final ParkingService parkingService;
   late final ParkingController parkingController;
-  final parkingComparison = ParkingComparisonController();
+  final parkingComparison = ParkingComparisonController(
+    store: createParkingComparisonStore(),
+  );
 
   late final SessionRepository sessionRepository;
   late final SessionService sessionService;
@@ -196,6 +200,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
     final supabase = Supabase.instance.client;
     _userId = supabase.auth.currentUser?.id;
+    unawaited(parkingComparison.setAccount(_userId));
 
     localStore =
         widget.sessionService?.store ??
@@ -279,7 +284,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         _myParkingRequestVersion++;
         _favoritesRequestVersion++;
         _removingFavoriteIds.clear();
-        parkingComparison.clear();
+        unawaited(parkingComparison.setAccount(nextUser));
 
         profileController.clear();
         sessionController.clear();
@@ -762,8 +767,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   }
 
   Future<void> _openParkingComparison() async {
+    final owner = _userId;
     if (_isOpeningComparison ||
-        !_sameUser(_userId) ||
+        !_sameUser(owner) ||
         !parkingComparison.canCompare) {
       return;
     }
@@ -774,6 +780,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         MaterialPageRoute<void>(
           builder: (_) => ParkingComparisonScreen(
             controller: parkingComparison,
+            connection: connection,
+            loadParking: (id) async {
+              _requireUser(owner);
+              final parking = await parkingController.loadParkingById(id);
+              _requireUser(owner);
+              return parking;
+            },
             onOpenDetails: (parking) =>
                 openParkingDetail(parking.toDetailArguments()),
           ),

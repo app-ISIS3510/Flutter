@@ -197,7 +197,7 @@ void main() {
       await tester.tap(action);
       await tester.pumpAndSettle();
     }
-    expect(comparison.selection.map((parking) => parking.id), [
+    expect(comparison.selection.map((item) => item.parking.id), [
       'parking-1',
       'parking-2',
     ]);

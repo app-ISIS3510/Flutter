@@ -355,6 +355,8 @@ class ParkingService {
 
     return SmartParkingResults(
       locationNotice: locationNotice,
+      updatedAt: catalog.updatedAt,
+      isFromCache: catalog.isFromCache,
       items: [
         for (final item in processed)
           SmartParkingResult(
