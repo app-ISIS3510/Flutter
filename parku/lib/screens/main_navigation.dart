@@ -42,6 +42,7 @@ import '../state/favorite_status_state.dart';
 import '../state/parking_detail_state.dart';
 import '../state/session_state.dart';
 import '../utils/screen_load_reporter.dart';
+import '../utils/screen_time_observer.dart';
 import '../utils/user_error_message.dart';
 import '../widgets/managed_future_builder.dart';
 import '../widgets/user_error_notice.dart';
@@ -51,6 +52,7 @@ import 'home.dart';
 import 'my_parking.dart';
 import 'no_active_parking.dart';
 import 'no_favorites.dart';
+import 'parking_budget_planner.dart';
 import 'parking_comparison.dart';
 import 'parking_detail.dart';
 import 'parking_list.dart';
@@ -70,6 +72,7 @@ class MainNavigationScreen extends StatefulWidget {
   final Future<List<ConnectivityResult>> Function()? checkConnection;
   final DateTime Function()? currentTime;
   final AnalyticsLocalDataSource? analyticsLocalDataSource;
+  final ScreenTimeObserver? screenTime;
 
   const MainNavigationScreen({
     super.key,
@@ -80,6 +83,7 @@ class MainNavigationScreen extends StatefulWidget {
     this.checkConnection,
     this.currentTime,
     this.analyticsLocalDataSource,
+    this.screenTime,
   });
 
   @override
@@ -216,6 +220,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     analyticsService = AnalyticsService(analyticsRepository);
     analyticsController = AnalyticsController(analyticsService);
     analyticsService.start();
+    widget.screenTime?.start(analyticsService);
 
     parkingRepository = ParkingRepository(supabase);
     distanceManager = DistanceManager();
@@ -284,6 +289,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
         profileController.clear();
         sessionController.clear();
         _returnToMain();
+        widget.screenTime?.setHomeScreen('map');
 
         setState(() {
           isLoadingSession = false;
@@ -411,6 +417,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    widget.screenTime?.setLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       unawaited(analyticsService.flushPending());
       unawaited(favoriteSyncService.flush());
@@ -428,6 +435,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     profileController.removeListener(_schedulePendingChanges);
     connection.dispose();
 
+    widget.screenTime?.stop(analyticsService);
     analyticsService.dispose();
     favoriteSyncService.removeListener(_onFavoriteSync);
     favoriteSyncService.dispose();
@@ -459,6 +467,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   void changePage(int index) {
     if (!mounted) return;
 
+    widget.screenTime?.setHomeScreen(switch (index) {
+      1 => 'parking_list',
+      2 => 'favorites',
+      3 => 'profile',
+      _ => 'map',
+    });
     _myParkingLoad?.cancel();
     _myParkingRequestVersion++;
 
@@ -562,7 +576,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
     Navigator.push<void>(
       context,
-      MaterialPageRoute<void>(
+      ScreenTimeRoute<void>(
+        screen: 'parking_history',
         builder: (_) => ParkingHistoryScreen(
           service: sessionService,
           onNavTap: _profileNavTap,
@@ -574,7 +589,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   Future<Vehicle?> _chooseVehicle() {
     return Navigator.push<Vehicle>(
       context,
-      MaterialPageRoute<Vehicle>(
+      ScreenTimeRoute<Vehicle>(
+        screen: 'choose_vehicle',
         builder: (_) => VehiclesScreen(
           controller: profileController,
           onNavTap: _profileNavTap,
@@ -702,7 +718,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
       await Navigator.push<void>(
         context,
-        MaterialPageRoute<void>(
+        ScreenTimeRoute<void>(
+          screen: 'search',
           builder: (_) => ListenableBuilder(
             listenable: profileController,
             builder: (context, child) => SearchScreen(
@@ -733,7 +750,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
                 Navigator.push<void>(
                   context,
-                  MaterialPageRoute<void>(
+                  ScreenTimeRoute<void>(
+                    screen: 'search_results',
                     builder: (_) => SearchResultsScreen(
                       analytics: analyticsController,
                       initialQuery: query,
@@ -771,7 +789,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     _isOpeningComparison = true;
     try {
       await Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
+        ScreenTimeRoute<void>(
+          screen: 'parking_comparison',
           builder: (_) => ParkingComparisonScreen(
             controller: parkingComparison,
             onOpenDetails: (parking) =>
@@ -853,7 +872,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     try {
       await Navigator.push<void>(
         context,
-        MaterialPageRoute<void>(
+        ScreenTimeRoute<void>(
+          screen: 'parking_detail',
           builder: (context) {
             return ValueListenableBuilder<FavoriteStatusState>(
               valueListenable: favoriteStatus,
@@ -951,6 +971,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                     _returnToMain();
                     changePage(index);
                   },
+                  onOpenBudgetPlanner: (details) {
+                    if (!context.mounted || !_sameUser(detailUserId)) return;
+                    Navigator.push<void>(
+                      context,
+                      ScreenTimeRoute<void>(
+                        screen: 'parking_budget_planner',
+                        builder: (_) => ParkingBudgetPlannerScreen(
+                          details: details,
+                          userId: detailUserId!,
+                        ),
+                      ),
+                    );
+                  },
                   onParkHere: (selectedParking) {
                     openPickupTime({
                       ...parking,
@@ -1039,7 +1072,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
       await Navigator.push<void>(
         context,
-        MaterialPageRoute<void>(
+        ScreenTimeRoute<void>(
+          screen: 'pickup_time',
           builder: (routeContext) => PickupTimeScreen(
             currentTime: widget.currentTime,
             loadPickupChoices: pickupAnalytics.loadSummary,
@@ -1192,7 +1226,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
       await Navigator.push<void>(
         context,
-        MaterialPageRoute<void>(
+        ScreenTimeRoute<void>(
+          screen: 'change_pickup_time',
           builder: (_) => ChangePickupTimeScreen(
             currentTime: widget.currentTime,
             onNavTap: _profileNavTap,
@@ -1312,6 +1347,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
     final version = ++_myParkingRequestVersion;
 
+    widget.screenTime?.setHomeScreen('my_parking');
     setState(() {
       _sessionLoadError = null;
       isLoadingSession = true;
@@ -1474,6 +1510,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
                 ? openParkingHistory
                 : null,
             onAnalyticsDashboard: openAnalyticsDashboard,
+            onSigningOut: widget.screenTime?.saveTime,
             onSignedOut: () {
               changePage(0);
             },

@@ -5,6 +5,7 @@ import '../../controllers/profile_controller.dart';
 import '../../models/vehicle.dart';
 import '../../services/driving_restriction_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/screen_time_observer.dart';
 import '../../widgets/design_icon.dart';
 import 'profile_widgets.dart';
 import 'vehicles_screen.dart';
@@ -182,7 +183,8 @@ class _DrivingRestrictionsScreenState extends State<DrivingRestrictionsScreen>
               foreground: AppColors.primary,
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute<Vehicle>(
+                ScreenTimeRoute<Vehicle>(
+                  screen: 'choose_vehicle',
                   builder: (_) => VehiclesScreen(
                     controller: widget.controller,
                     onNavTap: widget.onNavTap,

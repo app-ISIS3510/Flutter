@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/profile_controller.dart';
 import '../../models/vehicle.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/screen_time_observer.dart';
 import '../../widgets/design_icon.dart';
 import 'add_vehicle_screen.dart';
 import 'driving_restrictions_screen.dart';
@@ -23,7 +24,8 @@ class VehiclesScreen extends StatelessWidget {
     controller.clearError();
     Navigator.push(
       context,
-      MaterialPageRoute<void>(
+      ScreenTimeRoute<void>(
+        screen: 'add_vehicle',
         builder: (_) =>
             AddVehicleScreen(controller: controller, onNavTap: onNavTap),
       ),
@@ -237,7 +239,8 @@ class VehiclesScreen extends StatelessWidget {
                       : () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute<void>(
+                            ScreenTimeRoute<void>(
+                              screen: 'driving_restrictions',
                               builder: (_) => DrivingRestrictionsScreen(
                                 controller: controller,
                                 onNavTap: onNavTap,
