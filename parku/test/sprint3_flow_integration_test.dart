@@ -21,10 +21,12 @@ import 'package:parku/screens/my_parking.dart';
 import 'package:parku/services/pickup_analytics_service.dart';
 import 'package:parku/services/profile_service.dart';
 import 'package:parku/services/session_service.dart';
+import 'package:parku/utils/screen_time_observer.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'support/analytics_queue.dart';
 import 'support/memory_auth_storage.dart';
 import 'support/offline_fakes.dart';
 import 'support/parking_fakes.dart';
@@ -205,11 +207,19 @@ void main() {
           tester.view.resetDevicePixelRatio();
         });
 
+        final queue = TestAnalyticsQueue();
+        final screenTime = ScreenTimeObserver();
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
         await tester.pumpWidget(
           MaterialApp(
             theme: ThemeData(useMaterial3: true, fontFamily: 'Inter'),
+            navigatorObservers: [screenTime],
             home: MainNavigationScreen(
               currentTime: () => DateTime(2026, 10, 29, 12),
+              screenTime: screenTime,
+              analyticsLocalDataSource: queue,
               profileService: ProfileService(
                 SupabaseUserRepository(client),
                 checkConnection: () async => online,
@@ -334,6 +344,23 @@ void main() {
         expect(find.text('City U Parking'), findsOneWidget);
         expect(find.text('Motorcycle · ABC12D'), findsOneWidget);
         expect(tester.takeException(), isNull);
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(
+          queue.events
+              .where((event) => event.eventType == 'screen_time_spent')
+              .map((event) => event.screen),
+          containsAll([
+            'map',
+            'parking_list',
+            'parking_detail',
+            'parking_budget_planner',
+            'pickup_time',
+            'my_parking',
+            'profile',
+            'parking_history',
+          ]),
+        );
         await tester.pumpWidget(const SizedBox());
       },
     );
