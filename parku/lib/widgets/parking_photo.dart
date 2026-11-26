@@ -23,12 +23,14 @@ class ParkingPhoto extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = Uri.tryParse(imageUrl?.trim() ?? '');
-    final validUrl =
-        url != null &&
-        url.host.isNotEmpty &&
-        (url.scheme == 'https' || url.scheme == 'http');
+    if (url == null ||
+        url.host.isEmpty ||
+        (url.scheme != 'https' && url.scheme != 'http') ||
+        url.toString() == defaultUrl) {
+      return _fallback();
+    }
     return CachedNetworkImage(
-      imageUrl: validUrl ? url.toString() : defaultUrl,
+      imageUrl: url.toString(),
       cacheManager: cacheManager ?? ParkingImageCache.instance,
       width: double.infinity,
       height: 150,

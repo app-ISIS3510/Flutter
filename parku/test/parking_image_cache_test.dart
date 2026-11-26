@@ -25,13 +25,18 @@ class TestImageFiles implements FileSystem {
 }
 
 class UnavailableImageCache extends Fake implements BaseCacheManager {
+  final requestedUrls = <String>[];
+
   @override
   Stream<FileResponse> getFileStream(
     String url, {
     String? key,
     Map<String, String>? headers,
     bool? withProgress,
-  }) => Stream.error(const io.SocketException('Offline'));
+  }) {
+    requestedUrls.add(url);
+    return Stream.error(const io.SocketException('Offline'));
+  }
 }
 
 void main() {
@@ -189,34 +194,50 @@ void main() {
   );
 
   testWidgets(
-    'the default photo has a stable cache URL and custom URLs are supported',
+    'missing, invalid and default photo URLs load the asset without a request',
     (tester) async {
       final cache = UnavailableImageCache();
-      await tester.pumpWidget(
-        MaterialApp(home: ParkingPhoto(cacheManager: cache)),
-      );
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<CachedNetworkImage>(find.byType(CachedNetworkImage))
-            .imageUrl,
-        ParkingPhoto.defaultUrl,
-      );
-      await tester.pumpWidget(
-        MaterialApp(
-          home: ParkingPhoto(imageUrl: url, cacheManager: cache),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<CachedNetworkImage>(find.byType(CachedNetworkImage))
-            .imageUrl,
-        url,
-      );
+      for (final imageUrl in [
+        null,
+        ' ',
+        'file:///photo.png',
+        ' https://raw.githubusercontent.com/app-ISIS3510/Flutter/main/'
+            'parku/assets/images/cityuimage.png ',
+      ]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ParkingPhoto(imageUrl: imageUrl, cacheManager: cache),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(CachedNetworkImage), findsNothing);
+        expect(
+          tester.widget<Image>(find.byType(Image)).image,
+          const AssetImage('assets/images/cityuimage.png'),
+        );
+      }
+      expect(cache.requestedUrls, isEmpty);
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('a custom photo URL still uses the image cache', (tester) async {
+    final cache = UnavailableImageCache();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ParkingPhoto(imageUrl: url, cacheManager: cache),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<CachedNetworkImage>(find.byType(CachedNetworkImage))
+          .imageUrl,
+      url,
+    );
+    expect(cache.requestedUrls, [url]);
+    expect(tester.takeException(), isNull);
+  });
 
   test('optional image URLs survive saving parking data without changing old records', () {
     final row = {'id': 'parking-1', 'name': 'City U', 'address': 'Calle 20'};
