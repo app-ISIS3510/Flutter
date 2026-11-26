@@ -71,73 +71,79 @@ class _ParkingHistoryScreenState extends State<ParkingHistoryScreen> {
     );
   }
 
+  Widget _emptyHistory() => ProfileCard(
+    color: AppColors.lightPurple,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.history, size: 36, color: AppColors.primary),
+        const SizedBox(height: 12),
+        Text(
+          'No saved parking yet',
+          style: profileText(20, weight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Your next completed parking stay will appear here.',
+          style: profileText(14, color: AppColors.greyText),
+        ),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
-    return ProfilePage(
-      title: 'Saved parking',
-      onBack: () => Navigator.pop(context),
-      onNavTap: widget.onNavTap,
-      child: FutureBuilder<List<ParkingSummary>>(
-        future: _summaries,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return Column(
-              children: [
-                const ProfileError(
-                  'Could not read your saved parking on this device.',
-                ),
-                const SizedBox(height: 16),
-                ProfileButton(text: 'Try again', onPressed: _reload),
-              ],
-            );
-          }
-
-          final summaries = snapshot.data ?? [];
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return FutureBuilder<List<ParkingSummary>>(
+      future: _summaries,
+      builder: (context, snapshot) {
+        final Widget content;
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          content = const Center(child: CircularProgressIndicator());
+        } else if (snapshot.hasError) {
+          content = Column(
             children: [
-              Text(
-                'Completed stays saved on this device. Available without internet.',
-                style: profileText(13, color: AppColors.greyText),
+              const ProfileError(
+                'Could not read your saved parking on this device.',
               ),
-              const SizedBox(height: 20),
-              if (summaries.isEmpty)
-                ProfileCard(
-                  color: AppColors.lightPurple,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.history,
-                        size: 36,
-                        color: AppColors.primary,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'No saved parking yet',
-                        style: profileText(20, weight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Your next completed parking stay will appear here.',
-                        style: profileText(14, color: AppColors.greyText),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                for (final summary in summaries) ...[
-                  _summaryCard(summary),
-                  const SizedBox(height: 12),
-                ],
+              const SizedBox(height: 16),
+              ProfileButton(text: 'Try again', onPressed: _reload),
             ],
           );
-        },
-      ),
+        } else {
+          final summaries = snapshot.data ?? [];
+          return ProfilePage.list(
+            title: 'Saved parking',
+            onBack: () => Navigator.pop(context),
+            onNavTap: widget.onNavTap,
+            itemCount: summaries.isEmpty ? 2 : summaries.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: Text(
+                    'Completed stays saved on this device. Available without internet.',
+                    style: profileText(13, color: AppColors.greyText),
+                  ),
+                );
+              }
+
+              if (summaries.isEmpty) return _emptyHistory();
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _summaryCard(summaries[index - 1]),
+              );
+            },
+          );
+        }
+
+        return ProfilePage(
+          title: 'Saved parking',
+          onBack: () => Navigator.pop(context),
+          onNavTap: widget.onNavTap,
+          child: content,
+        );
+      },
     );
   }
 }
