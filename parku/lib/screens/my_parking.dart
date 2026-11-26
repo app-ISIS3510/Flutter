@@ -19,6 +19,7 @@ class MyParkingScreen extends StatefulWidget {
   final VoidCallback? onChangePickupTime;
   final NavigationController navigationController;
   final AnalyticsController? analyticsController;
+  final DateTime Function() currentTime;
 
   final ParkingSession session;
   final Parking parking;
@@ -37,6 +38,7 @@ class MyParkingScreen extends StatefulWidget {
     this.notice,
     this.onRefresh,
     this.analyticsController,
+    this.currentTime = DateTime.now,
   });
 
   @override
@@ -44,25 +46,7 @@ class MyParkingScreen extends StatefulWidget {
 }
 
 class _MyParkingScreenState extends State<MyParkingScreen> {
-  Timer? _timer;
   bool _isOpeningNavigation = false;
-
-  Duration remaining = Duration.zero;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _updateRemainingTime();
-
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
-        setState(() {
-          _updateRemainingTime();
-        });
-      }
-    });
-  }
 
   Future<void> _openWaze() {
     return _openNavigation(NavigationProvider.waze);
@@ -90,29 +74,6 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
     }
   }
 
-  void _updateRemainingTime() {
-    final now = DateTime.now();
-
-    final pickupTime = widget.session.pickupTime.toLocal();
-
-    final difference = pickupTime.difference(now);
-
-    if (difference.isNegative) {
-      remaining = Duration.zero;
-    } else {
-      remaining = difference;
-    }
-  }
-
-  String get remainingText {
-    final hours = remaining.inHours;
-
-    final minutes = remaining.inMinutes.remainder(60);
-
-    return '${hours.toString().padLeft(2, '0')}:'
-        '${minutes.toString().padLeft(2, '0')}';
-  }
-
   String get pickupTimeText {
     final date = widget.session.pickupTime.toLocal();
 
@@ -129,12 +90,6 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
     final minute = date.minute.toString().padLeft(2, '0');
 
     return '$hour:$minute $suffix';
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
   }
 
   @override
@@ -242,13 +197,9 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
 
                                 const SizedBox(height: 8),
 
-                                Text(
-                                  remainingText,
-                                  style: const TextStyle(
-                                    fontSize: 50,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.primary,
-                                  ),
+                                _PickupCountdown(
+                                  pickupTime: widget.session.pickupTime,
+                                  currentTime: widget.currentTime,
                                 ),
 
                                 const SizedBox(height: 4),
@@ -456,6 +407,84 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
             NavBar(currentIndex: widget.currentIndex, onTap: widget.onNavTap),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _PickupCountdown extends StatefulWidget {
+  final DateTime pickupTime;
+  final DateTime Function() currentTime;
+
+  const _PickupCountdown({required this.pickupTime, required this.currentTime});
+
+  @override
+  State<_PickupCountdown> createState() => _PickupCountdownState();
+}
+
+class _PickupCountdownState extends State<_PickupCountdown> {
+  Timer? _timer;
+  late int _remainingMinutes;
+  late final AppLifecycleListener _lifecycleListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _remainingMinutes = _readCountdownAndScheduleUpdate();
+    _lifecycleListener = AppLifecycleListener(
+      onResume: _refreshCountdown,
+      onHide: () => _timer?.cancel(),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _PickupCountdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pickupTime != oldWidget.pickupTime ||
+        widget.currentTime != oldWidget.currentTime) {
+      _remainingMinutes = _readCountdownAndScheduleUpdate();
+    }
+  }
+
+  int _readCountdownAndScheduleUpdate() {
+    _timer?.cancel();
+    final remaining = widget.pickupTime.difference(widget.currentTime());
+    final minutes = remaining.inMinutes;
+    if (minutes <= 0) return 0;
+
+    // The displayed value drops after crossing the whole-minute boundary.
+    final untilNextMinute = remaining - Duration(minutes: minutes);
+    _timer = Timer(
+      untilNextMinute + const Duration(milliseconds: 1),
+      _refreshCountdown,
+    );
+    return minutes;
+  }
+
+  void _refreshCountdown() {
+    final minutes = _readCountdownAndScheduleUpdate();
+    if (minutes != _remainingMinutes) {
+      setState(() => _remainingMinutes = minutes);
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _lifecycleListener.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hours = (_remainingMinutes ~/ 60).toString().padLeft(2, '0');
+    final minutes = (_remainingMinutes % 60).toString().padLeft(2, '0');
+    return Text(
+      '$hours:$minutes',
+      style: const TextStyle(
+        fontSize: 50,
+        fontWeight: FontWeight.w700,
+        color: AppColors.primary,
       ),
     );
   }
