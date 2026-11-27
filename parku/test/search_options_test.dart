@@ -10,6 +10,7 @@ import 'package:parku/controllers/parking_controller.dart';
 import 'package:parku/models/vehicle.dart';
 import 'package:parku/repositories/parking_repository.dart';
 import 'package:parku/screens/search.dart';
+import 'package:parku/services/connectivity_service.dart';
 import 'package:parku/services/distance_manager.dart';
 import 'package:parku/services/parking_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -19,14 +20,23 @@ import 'package:parku/data/local/parking_local_data_source.dart';
 import 'support/parking_fakes.dart';
 
 class TestParkingLocalDataSource extends ParkingLocalDataSource {
+  CachedParkingList? saved;
+
   @override
   Future<CachedParkingList?> readParkingLots() async => null;
 
   @override
-  Future<CachedParkingList?> readParkingForNearby() async => null;
+  Future<CachedParkingList?> readParkingForNearby() async => saved;
 
   @override
   Future<void> saveParkingLots(List<Parking> parkingLots) async {}
+}
+
+class SearchConnectivity extends ConnectivityService {
+  bool online = true;
+
+  @override
+  Future<bool?> connectionStatus() async => online;
 }
 
 void main() {
@@ -34,6 +44,9 @@ void main() {
   late FakeLocationPlatform location;
   late SupabaseClient client;
   late ParkingController controller;
+  late TestParkingLocalDataSource local;
+  late SearchConnectivity connection;
+  late int requests;
   late List<String> searches;
 
   const car = Vehicle(
@@ -54,26 +67,28 @@ void main() {
     location = FakeLocationPlatform();
     GeolocatorPlatform.instance = location;
     searches = [];
+    local = TestParkingLocalDataSource();
+    connection = SearchConnectivity();
+    requests = 0;
     client = SupabaseClient(
       'https://test.invalid',
       'test-key',
       authOptions: const AuthClientOptions(autoRefreshToken: false),
-      httpClient: MockClient(
-        (request) async => http.Response(
+      httpClient: MockClient((request) async {
+        requests++;
+        return http.Response(
           jsonEncode([parkingData()]),
           200,
           request: request,
           headers: {'content-type': 'application/json'},
-        ),
-      ),
+        );
+      }),
     );
     controller = ParkingController(
       ParkingService(
-        ParkingRepository(
-          client,
-          localDataSource: TestParkingLocalDataSource(),
-        ),
+        ParkingRepository(client, localDataSource: local),
         DistanceManager(),
+        connectivityService: connection,
       ),
     );
   });
@@ -92,6 +107,17 @@ void main() {
       onSearch: searches.add,
     ),
   );
+
+  void saveOfflineCatalog() {
+    connection.online = false;
+    local.saved = CachedParkingList(
+      parkingLots: [
+        Parking.fromMap(parkingData(name: 'Far parking', latitude: 4.63)),
+        Parking.fromMap(parkingData(id: 'near', name: 'Near parking')),
+      ],
+      cachedAt: DateTime.utc(2026),
+    );
+  }
 
   testWidgets(
     'shows availability for the selected vehicle and preserves search',
@@ -157,9 +183,12 @@ void main() {
     await tester.pumpWidget(search());
     await tester.pumpAndSettle();
     expect(
-      find.text('Turn on your device location to find nearby parking lots.'),
+      find.text(
+        'Device location is turned off. Showing parking lots without distances.',
+      ),
       findsOneWidget,
     );
+    expect(find.text('City U Parking'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'Library');
     await tester.testTextInput.receiveAction(TextInputAction.search);
     expect(searches, ['Library']);
@@ -173,12 +202,80 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.text(
-        'Could not get your location. Check your GPS and reopen search.',
+        'Could not get your location. Showing parking lots without distances.',
       ),
       findsOneWidget,
     );
     expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('City U Parking'), findsOneWidget);
   });
+
+  testWidgets('shows saved lots before the offline GPS request finishes', (
+    tester,
+  ) async {
+    saveOfflineCatalog();
+    final position = Completer<Position>();
+    location.positionResult = position.future;
+    await tester.pumpWidget(search());
+    await tester.pumpAndSettle();
+
+    expect(requests, 0);
+    expect(location.settings?.timeLimit, const Duration(seconds: 8));
+    expect(find.text('Far parking'), findsOneWidget);
+    expect(find.text('Near parking'), findsOneWidget);
+    expect(find.textContaining('straight-line'), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    position.complete(location.positionAt(DateTime.now()));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('straight-line'), findsNWidgets(2));
+    expect(
+      tester.getTopLeft(find.text('Near parking')).dy,
+      lessThan(tester.getTopLeft(find.text('Far parking')).dy),
+    );
+  });
+
+  testWidgets('uses a recent location offline and refreshes it on request', (
+    tester,
+  ) async {
+    saveOfflineCatalog();
+    location.lastKnownPosition = location.positionAt(
+      DateTime.now().subtract(const Duration(minutes: 1)),
+    );
+    await tester.pumpWidget(search());
+    await tester.pumpAndSettle();
+    expect(requests, 0);
+    expect(location.positionCalls, 0);
+    expect(
+      find.text('Distances use your last known location.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('straight-line'), findsNWidgets(2));
+
+    await tester.ensureVisible(find.text('Refresh nearby parking'));
+    await tester.tap(find.text('Refresh nearby parking'));
+    await tester.pumpAndSettle();
+    expect(location.positionCalls, 1);
+    expect(find.text('Distances use your last known location.'), findsNothing);
+  });
+
+  testWidgets(
+    'ignores an old location and keeps the saved results on timeout',
+    (tester) async {
+      saveOfflineCatalog();
+      location.lastKnownPosition = location.positionAt(
+        DateTime.now().subtract(const Duration(hours: 1)),
+      );
+      location.failure = TimeoutException('Location timed out');
+      await tester.pumpWidget(search());
+      await tester.pumpAndSettle();
+      expect(location.positionCalls, 1);
+      expect(find.text('Far parking'), findsOneWidget);
+      expect(find.text('Near parking'), findsOneWidget);
+      expect(find.textContaining('without distances'), findsOneWidget);
+      expect(find.textContaining('straight-line'), findsNothing);
+    },
+  );
 
   testWidgets('fits a small phone with the availability text', (tester) async {
     tester.view.physicalSize = const Size(320, 568);

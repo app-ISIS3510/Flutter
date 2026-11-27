@@ -48,6 +48,8 @@ class ProfileService {
 
   bool get usingSavedData => profileFromCache || vehiclesFromCache;
 
+  List<Vehicle>? get lastVehicles => _lastVehicles;
+
   String? get _owner => store?.userId;
 
   void _checkOwner(String? owner) {
@@ -134,7 +136,11 @@ class ProfileService {
     _checkOwner(owner);
   }
 
-  Future<void> _saveVehicles(List<Vehicle> vehicles, String? owner) async {
+  Future<void> _saveVehicles(
+    List<Vehicle> vehicles,
+    String? owner, {
+    bool requireLocalSave = false,
+  }) async {
     _checkOwner(owner);
 
     _lastVehicles = vehicles;
@@ -162,6 +168,7 @@ class ProfileService {
       }
     } catch (_) {
       localSaveFailed = true;
+      if (requireLocalSave) rethrow;
     }
 
     _checkOwner(owner);
@@ -356,6 +363,9 @@ class ProfileService {
     Map<String, dynamic> request,
   ) async {
     _checkOwner(owner);
+    final clearVehicleDraft =
+        request['kind'] == 'add_vehicle' &&
+        jsonEncode(vehicleDraft) == jsonEncode(request);
 
     try {
       await store?.remove('profile_request');
@@ -364,7 +374,7 @@ class ProfileService {
         await store?.remove('draft_profile');
       }
 
-      if (request['kind'] == 'add_vehicle') {
+      if (clearVehicleDraft) {
         await store?.remove('draft_add_vehicle');
       }
     } catch (error) {
@@ -379,7 +389,7 @@ class ProfileService {
       profileDraft = null;
     }
 
-    if (request['kind'] == 'add_vehicle') {
+    if (clearVehicleDraft) {
       vehicleDraft = null;
     }
   }
@@ -397,13 +407,17 @@ class ProfileService {
     }
   }
 
-  Future<bool> _verify(Map<String, dynamic> request, String? owner) async {
+  Future<bool> _verify(
+    Map<String, dynamic> request,
+    String? owner, {
+    bool requireLocalSave = false,
+  }) async {
     if (request['kind'] == 'profile') {
       final profile = await repository.getProfile().timeout(requestTimeout);
       await _saveProfile(profile, owner);
     } else {
       final vehicles = await repository.getVehicles().timeout(requestTimeout);
-      await _saveVehicles(vehicles, owner);
+      await _saveVehicles(vehicles, owner, requireLocalSave: requireLocalSave);
     }
 
     return _matches(request);
@@ -415,11 +429,6 @@ class ProfileService {
     bool replaying = false,
   }) async {
     final offline = await checkConnection() == false;
-    if (offline && request['kind'] == 'add_vehicle') {
-      throw const ConnectionFailure(
-        'Connect to the internet to save a vehicle. Your plate has not been registered.',
-      );
-    }
     if (store == null) {
       if (offline) {
         throw const ConnectionFailure('Connect to save your changes.');
@@ -429,32 +438,30 @@ class ProfileService {
     }
 
     final owner = _owner;
+    final addingVehicle = request['kind'] == 'add_vehicle';
+    final confirmQueuedRegistration = replaying && addingVehicle;
 
     await restorePendingChange(strict: true);
-
-    if (request['kind'] == 'add_vehicle' &&
-        pendingChange != null &&
-        jsonEncode(pendingChange) != jsonEncode(request)) {
-      throw const ConnectionFailure(
-        'A previous change is still unconfirmed. Refresh and retry that change first.',
-      );
-    }
 
     if (request['kind'] == 'profile') {
       profileDraft = request;
       await store!.write('draft_profile', request);
     }
 
-    if (request['kind'] == 'add_vehicle') {
+    if (addingVehicle && !replaying && !offline && queuedChanges.isEmpty) {
+      if (pendingChange != null &&
+          jsonEncode(pendingChange) != jsonEncode(request)) {
+        throw const ConnectionFailure(
+          'A previous change is still unconfirmed. Refresh and retry that change first.',
+        );
+      }
       vehicleDraft = request;
       await store!.write('draft_add_vehicle', request);
     }
 
     _checkOwner(owner);
 
-    if (!replaying &&
-        queuedChanges.isNotEmpty &&
-        request['kind'] != 'add_vehicle') {
+    if (!replaying && queuedChanges.isNotEmpty) {
       await _queueChange(request, owner);
       if (!offline) {
         try {
@@ -483,14 +490,18 @@ class ProfileService {
     }
 
     try {
-      if (await _verify(request, owner)) {
+      if (await _verify(
+        request,
+        owner,
+        requireLocalSave: confirmQueuedRegistration,
+      )) {
         await _clearPending(owner, request);
         return;
       }
     } catch (error) {
       if (!isConnectionError(error)) rethrow;
 
-      if (!replaying && request['kind'] != 'add_vehicle') {
+      if (!replaying) {
         await _queueChange(request, owner);
         throw const QueuedChange(
           'Your change is saved on this device. It will be sent when you reconnect.',
@@ -542,7 +553,11 @@ class ProfileService {
       }
 
       try {
-        if (await _verify(request, owner)) {
+        if (await _verify(
+          request,
+          owner,
+          requireLocalSave: confirmQueuedRegistration,
+        )) {
           await _clearPending(owner, request);
           return;
         }
@@ -550,7 +565,7 @@ class ProfileService {
         if (!isConnectionError(checkError)) rethrow;
       }
 
-      if (!replaying && request['kind'] != 'add_vehicle') {
+      if (!replaying) {
         await _queueChange(request, owner);
         throw const QueuedChange(
           'Your change is pending confirmation. It will be checked when you reconnect.',
@@ -562,6 +577,13 @@ class ProfileService {
       );
     }
 
+    // Keep the queued registration until its server ID is saved on this device.
+    if (confirmQueuedRegistration &&
+        !await _verify(request, owner, requireLocalSave: true)) {
+      throw const ConnectionFailure(
+        'The vehicle registration is still unconfirmed. Refresh to check it.',
+      );
+    }
     try {
       await _clearPending(owner, request);
     } catch (_) {
@@ -597,7 +619,7 @@ class ProfileService {
       _checkOwner(owner);
       await restorePendingChange(strict: true);
       final pending = pendingChange;
-      if (pending != null && pending['kind'] != 'add_vehicle') {
+      if (pending != null) {
         await _change(
           pending,
           () => _sendStoredChange(pending),
@@ -614,6 +636,15 @@ class ProfileService {
           replaying: true,
         );
         _checkOwner(owner);
+        final vehicles = _lastVehicles;
+        if (request['kind'] == 'delete_vehicle' && vehicles != null) {
+          // Save the confirmed removal before clearing its queue entry.
+          await _saveVehicles(
+            vehicles.where((vehicle) => vehicle.id != request['id']).toList(),
+            owner,
+            requireLocalSave: true,
+          );
+        }
         final next = queuedChanges.skip(1).toList();
         await store!.write('profile_queue', {'changes': next});
         _checkOwner(owner);
@@ -637,6 +668,11 @@ class ProfileService {
         await _saveProfile(saved, owner);
       case 'select_vehicle':
         await repository.selectVehicle(request['id'] as String);
+      case 'add_vehicle':
+        await repository.addVehicle(
+          VehicleType.values.byName(request['type'] as String),
+          request['plate'] as String,
+        );
       case 'delete_vehicle':
         await repository.deleteVehicle(request['id'] as String);
       default:

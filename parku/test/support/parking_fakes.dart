@@ -10,6 +10,13 @@ class FakeLocationPlatform extends GeolocatorPlatform {
   int permissionRequests = 0;
   Object? failure;
   LocationSettings? settings;
+  Position? lastKnownPosition;
+  Future<Position>? positionResult;
+
+  @override
+  Future<Position?> getLastKnownPosition({
+    bool forceLocationManager = false,
+  }) async => lastKnownPosition;
 
   @override
   Future<bool> isLocationServiceEnabled() async => enabled;
@@ -30,19 +37,23 @@ class FakeLocationPlatform extends GeolocatorPlatform {
     positionCalls++;
     settings = locationSettings;
     if (failure != null) throw failure!;
-    return Position(
-      latitude: latitude,
-      longitude: longitude,
-      timestamp: DateTime.now(),
-      accuracy: 5,
-      altitude: 0,
-      altitudeAccuracy: 0,
-      heading: 0,
-      headingAccuracy: 0,
-      speed: 0,
-      speedAccuracy: 0,
-    );
+    final pending = positionResult;
+    if (pending != null) return pending;
+    return positionAt(DateTime.now());
   }
+
+  Position positionAt(DateTime time) => Position(
+    latitude: latitude,
+    longitude: longitude,
+    timestamp: time,
+    accuracy: 5,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+  );
 }
 
 Map<String, dynamic> parkingData({

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/profile_controller.dart';
 import '../../services/profile_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/user_error_notice.dart';
 import 'profile_widgets.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -22,6 +23,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final _name = TextEditingController(
     text:
         widget.controller.profileDraft?['name'] as String? ??
+        widget.controller.queuedProfileEdit?.name ??
         (widget.controller.pendingChange?['kind'] == 'profile'
             ? widget.controller.pendingChange!['name'] as String
             : widget.controller.profile?.fullName),
@@ -29,6 +31,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final _email = TextEditingController(
     text:
         widget.controller.profileDraft?['email'] as String? ??
+        widget.controller.queuedProfileEdit?.email ??
         (widget.controller.pendingChange?['kind'] == 'profile'
             ? widget.controller.pendingChange!['email'] as String
             : widget.controller.profile?.email),
@@ -47,18 +50,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         !mounted) {
       return;
     }
-    final pending = widget.controller.profile?.pendingEmail;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          widget.controller.changeQueued
-              ? 'Changes saved on this device. They will be sent when you reconnect.'
-              : pending != null && pending.isNotEmpty
-              ? 'Name saved. Check your email to confirm the new address.'
-              : 'Profile updated.',
+    if (widget.controller.changeQueued) {
+      showUserMessage(
+        context,
+        'Your profile changes are saved on this device. They will sync when you reconnect.',
+      );
+    } else {
+      final pending = widget.controller.profile?.pendingEmail;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            pending != null && pending.isNotEmpty
+                ? 'Name saved. Check your email to confirm the new address.'
+                : 'Profile updated.',
+          ),
         ),
-      ),
-    );
+      );
+    }
     Navigator.pop(context);
   }
 

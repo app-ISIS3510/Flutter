@@ -4,6 +4,7 @@ import '../../controllers/profile_controller.dart';
 import '../../models/vehicle.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/design_icon.dart';
+import '../../widgets/user_error_notice.dart';
 import 'add_vehicle_screen.dart';
 import 'driving_restrictions_screen.dart';
 import 'profile_widgets.dart';
@@ -48,26 +49,57 @@ class VehiclesScreen extends StatelessWidget {
         ],
       ),
     );
-    if (confirmed == true) await controller.deleteVehicle(vehicle.id);
+    if (confirmed != true || !context.mounted) return;
+    final deleted = await controller.deleteVehicle(vehicle.id);
+    if (deleted && controller.changeQueued && context.mounted) {
+      showUserMessage(
+        context,
+        '${vehicle.plate} was removed on this device. The deletion will sync when you reconnect.',
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: controller,
     builder: (context, _) {
-      final empty = controller.vehicles.isEmpty;
+      final vehicles = controller.vehicles;
+      final registrations = controller.pendingVehicleRegistrations;
+      final empty = vehicles.isEmpty;
       return ProfilePage(
         title: 'My vehicles',
         onBack: () => Navigator.pop(context),
         onNavTap: onNavTap,
-        gap: empty ? 70 : 24,
+        gap: empty && registrations.isEmpty ? 70 : 24,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (controller.notice != null) ...[
-              ProfileNotice(
-                controller.notice!,
-                onRetry: controller.busy ? null : controller.load,
+            if (controller.notice != null &&
+                !controller.busy &&
+                !controller.loading &&
+                controller.error == null) ...[
+              TextButton(
+                onPressed: controller.load,
+                child: const Text('Refresh'),
+              ),
+              const SizedBox(height: 16),
+            ],
+            for (final registration in registrations) ...[
+              ProfileCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${registration.type.label} · ${registration.plate}',
+                      style: profileText(18, weight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Pending registration. ParkU will send it when you reconnect.',
+                      style: profileText(14, color: AppColors.greyText),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
             ],
@@ -86,9 +118,14 @@ class VehiclesScreen extends StatelessWidget {
               if (empty && controller.error != null) ...[
                 ProfileCard(
                   child: Text(
-                    'Your vehicles could not be loaded. Connect and refresh before adding or choosing one.',
+                    'Your vehicles could not be loaded. Reconnect and refresh to see registered vehicles.',
                     style: profileText(15),
                   ),
+                ),
+                const SizedBox(height: 16),
+                ProfileButton(
+                  text: 'Add vehicle',
+                  onPressed: controller.busy ? null : () => _add(context),
                 ),
               ] else if (empty) ...[
                 ProfileCard(
@@ -99,7 +136,9 @@ class VehiclesScreen extends StatelessWidget {
                       const DesignIcon('empty_car', size: 48),
                       const SizedBox(height: 12),
                       Text(
-                        'Add your first vehicle',
+                        registrations.isEmpty
+                            ? 'Add your first vehicle'
+                            : 'Add another vehicle',
                         style: profileText(25, weight: FontWeight.w700),
                       ),
                       const SizedBox(height: 12),
@@ -128,7 +167,7 @@ class VehiclesScreen extends StatelessWidget {
                   style: profileText(15, color: AppColors.greyText),
                 ),
                 const SizedBox(height: 16),
-                for (final vehicle in controller.vehicles) ...[
+                for (final vehicle in vehicles) ...[
                   ProfileCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

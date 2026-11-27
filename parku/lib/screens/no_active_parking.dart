@@ -72,7 +72,7 @@ class NoActiveParkingScreen extends StatelessWidget {
 
                           Text(
                             isFromCache
-                                ? 'The last saved snapshot had no active session. '
+                                ? 'No active parking is saved on this device. '
                                       'Reconnect to check your current server status.'
                                 : 'Start parking after you leave your vehicle to see how much time is left until pickup.',
                             style: const TextStyle(

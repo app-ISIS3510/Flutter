@@ -4,7 +4,7 @@ import 'parking_availability.dart';
 
 class ParkingOption {
   final Parking parking;
-  final double distanceMeters;
+  final double? distanceMeters;
   final VehicleType? vehicleType;
   final bool isFromCache;
   final DateTime? updatedAt;

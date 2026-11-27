@@ -96,6 +96,8 @@ class SessionController {
     required DateTime pickupTime,
     required String vehicleId,
     String parkingName = 'Parking stay',
+    String? vehicleType,
+    String? vehiclePlate,
     DateTime? suggestedPickupTime,
   }) {
     return _change(
@@ -104,6 +106,8 @@ class SessionController {
         pickupTime: pickupTime,
         vehicleId: vehicleId,
         parkingName: parkingName,
+        vehicleType: vehicleType,
+        vehiclePlate: vehiclePlate,
         suggestedPickupTime: suggestedPickupTime,
       ),
     );

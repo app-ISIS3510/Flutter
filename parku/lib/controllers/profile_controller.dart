@@ -14,7 +14,7 @@ class ProfileController extends ChangeNotifier {
   ProfileController(this.service);
 
   UserProfile? profile;
-  List<Vehicle> vehicles = [];
+  List<Vehicle> _vehicles = [];
   bool loading = false;
   bool isAdmin = false;
   bool busy = false;
@@ -41,6 +41,48 @@ class ProfileController extends ChangeNotifier {
       return 'Your information loaded, but its offline copy could not be saved.';
     }
     return null;
+  }
+
+  String? get profileNotice => service.queuedChanges.isEmpty ? notice : null;
+
+  ({String name, String email})? get queuedProfileEdit {
+    for (final change in service.queuedChanges.reversed) {
+      if (change['kind'] == 'profile') {
+        return (
+          name: change['name'] as String,
+          email: change['email'] as String,
+        );
+      }
+    }
+    return null;
+  }
+
+  List<Vehicle> get vehicles {
+    final deletedIds = {
+      for (final change in service.queuedChanges)
+        if (change['kind'] == 'delete_vehicle') change['id'],
+    };
+    if (deletedIds.isEmpty) return _vehicles;
+    return _vehicles
+        .where((vehicle) => !deletedIds.contains(vehicle.id))
+        .toList();
+  }
+
+  List<({String plate, VehicleType type})> get pendingVehicleRegistrations {
+    final registered = vehicles;
+    return [
+      for (final change in service.queuedChanges)
+        if (change['kind'] == 'add_vehicle' &&
+            !registered.any(
+              (vehicle) =>
+                  vehicle.plate == change['plate'] &&
+                  vehicle.type.value == change['type'],
+            ))
+          (
+            plate: change['plate'] as String,
+            type: VehicleType.values.byName(change['type'] as String),
+          ),
+    ];
   }
 
   Vehicle? get selectedVehicle {
@@ -71,7 +113,7 @@ class ProfileController extends ChangeNotifier {
     _version++;
     service.clear();
     profile = null;
-    vehicles = [];
+    _vehicles = [];
     error = null;
     loading = false;
     busy = false;
@@ -94,7 +136,7 @@ class ProfileController extends ChangeNotifier {
       final savedVehicles = await service.readSavedVehicles();
       if (version != _version) return;
       profile = savedProfile ?? profile;
-      vehicles = savedVehicles ?? vehicles;
+      _vehicles = savedVehicles ?? _vehicles;
       _notify();
       final user = await service.getProfile();
       if (version != _version) return;
@@ -114,7 +156,7 @@ class ProfileController extends ChangeNotifier {
       isAdmin = adminStatus;
       final currentVehicles = await service.getVehicles();
       if (version != _version) return;
-      vehicles = currentVehicles;
+      _vehicles = currentVehicles;
       await service.checkPendingChange();
       if (!service.usingSavedData && await service.syncPendingChanges()) {
         final updatedProfile = await service.getProfile();
@@ -122,12 +164,13 @@ class ProfileController extends ChangeNotifier {
         profile = updatedProfile;
         final updatedVehicles = await service.getVehicles();
         if (version != _version) return;
-        vehicles = updatedVehicles;
+        _vehicles = updatedVehicles;
       }
     } catch (e) {
       if (version == _version) error = messageFor(e);
     } finally {
       if (version == _version) {
+        _vehicles = service.lastVehicles ?? _vehicles;
         loading = false;
         _notify();
       }
@@ -147,15 +190,14 @@ class ProfileController extends ChangeNotifier {
     try {
       await action();
       if (version != _version) return false;
-      final savedVehicles = refreshVehicles
-          ? await service.getVehicles()
-          : vehicles;
-      if (version != _version) return false;
-      vehicles = savedVehicles;
-      if (refreshVehicles && service.vehiclesFromCache) {
-        throw const ConnectionFailure(
-          'Your change was saved, but the vehicle list could not be refreshed. Reconnect and refresh before choosing a vehicle.',
-        );
+      if (refreshVehicles) {
+        await service.getVehicles();
+        if (version != _version) return false;
+        if (service.vehiclesFromCache) {
+          throw const ConnectionFailure(
+            'Your change was saved, but the vehicle list could not be refreshed. Reconnect and refresh before choosing a vehicle.',
+          );
+        }
       }
       return true;
     } on QueuedChange {
@@ -167,6 +209,7 @@ class ProfileController extends ChangeNotifier {
       return false;
     } finally {
       if (version == _version) {
+        _vehicles = service.lastVehicles ?? _vehicles;
         busy = false;
         _notify();
       }
