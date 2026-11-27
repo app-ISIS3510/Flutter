@@ -72,8 +72,14 @@ class ParkingController {
     return service.getParkingOptions(vehicleType: vehicleType);
   }
 
-  Future<NearbyParkingState> loadNearbyParking({VehicleType? vehicleType}) {
-    return service.getNearbyParking(vehicleType: vehicleType);
+  Stream<NearbyParkingState> watchNearbyParking({
+    VehicleType? vehicleType,
+    bool refreshLocation = false,
+  }) {
+    return service.watchNearbyParking(
+      vehicleType: vehicleType,
+      refreshLocation: refreshLocation,
+    );
   }
 
   Future<SmartParkingResults> loadSmartParkingResults({

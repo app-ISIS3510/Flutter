@@ -120,6 +120,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     builder: (context, _) {
       final controller = widget.controller;
       final profile = controller.profile;
+      final edit = controller.queuedProfileEdit;
+      final hasProfile = profile != null || edit != null;
+      final name = edit?.name ?? profile?.fullName ?? '';
+      final email = edit?.email ?? profile?.email ?? '';
+      final notice = controller.profileNotice;
       return ProfilePage(
         title: 'My profile',
         gap: 33,
@@ -127,11 +132,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (controller.loading && profile == null)
+            if (controller.loading && !hasProfile)
               const Center(child: CircularProgressIndicator()),
-            if (controller.notice != null) ...[
+            if (notice != null) ...[
               ProfileNotice(
-                controller.notice!,
+                notice,
                 onRetry: controller.loading ? null : controller.load,
               ),
               const SizedBox(height: 16),
@@ -142,7 +147,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ProfileButton(text: 'Try again', onPressed: controller.load),
               const SizedBox(height: 16),
             ],
-            if (profile != null) ...[
+            if (hasProfile) ...[
               ProfileCard(
                 color: AppColors.lightPurple,
                 child: Column(
@@ -160,14 +165,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      profile.fullName.isEmpty
-                          ? 'My profile'
-                          : profile.fullName,
+                      name.isEmpty ? 'My profile' : name,
                       style: profileText(25, weight: FontWeight.w700),
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      profile.email,
+                      email,
                       style: profileText(13, color: AppColors.greyText),
                     ),
                     const SizedBox(height: 12),

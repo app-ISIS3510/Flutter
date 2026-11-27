@@ -7,6 +7,7 @@ import '../models/parking_session.dart';
 import '../theme/app_theme.dart';
 import '../utils/screen_time_observer.dart';
 import '../widgets/navigation_bar.dart';
+import '../widgets/user_error_notice.dart';
 import 'end_parking.dart';
 import '../controllers/navigation_controller.dart';
 import '../controllers/analytics_controller.dart';
@@ -16,13 +17,17 @@ import '../widgets/external_navigation.dart';
 class MyParkingScreen extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onNavTap;
-  final Future<void> Function() onEndParking;
+  final Future<void> Function()? onEndParking;
   final VoidCallback? onChangePickupTime;
+  final VoidCallback? onCancelRequest;
   final NavigationController navigationController;
   final AnalyticsController? analyticsController;
   final DateTime Function() currentTime;
 
-  final ParkingSession session;
+  final ParkingSession? session;
+  final DateTime? requestedPickupTime;
+  final String? requestedVehicleType;
+  final String? requestedVehiclePlate;
   final Parking parking;
   final String? notice;
   final VoidCallback? onRefresh;
@@ -31,16 +36,20 @@ class MyParkingScreen extends StatefulWidget {
     super.key,
     required this.currentIndex,
     required this.onNavTap,
-    required this.onEndParking,
     required this.session,
     required this.parking,
     required this.navigationController,
     this.onChangePickupTime,
+    this.onEndParking,
+    this.onCancelRequest,
+    this.requestedPickupTime,
+    this.requestedVehicleType,
+    this.requestedVehiclePlate,
     this.notice,
     this.onRefresh,
     this.analyticsController,
     this.currentTime = DateTime.now,
-  });
+  }) : assert(session != null || requestedPickupTime != null);
 
   @override
   State<MyParkingScreen> createState() => _MyParkingScreenState();
@@ -68,15 +77,15 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
         parking: widget.parking,
         analytics: widget.analyticsController,
         screen: 'my_parking',
-        activeSessionId: widget.session.id,
+        activeSessionId: widget.session?.id,
       );
     } finally {
       if (mounted) setState(() => _isOpeningNavigation = false);
     }
   }
 
-  String get pickupTimeText {
-    final date = widget.session.pickupTime.toLocal();
+  String _formatPickupTime(DateTime pickupTime) {
+    final date = pickupTime.toLocal();
 
     int hour = date.hour;
 
@@ -95,9 +104,13 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final session = widget.session;
+    final pickupTime = session?.pickupTime ?? widget.requestedPickupTime!;
+    final vehicleType = session?.vehicleType ?? widget.requestedVehicleType;
     final status =
         widget.notice ??
-        (widget.session.isFromCache ? 'Last confirmed session' : null);
+        (session?.isFromCache == true ? 'Last confirmed session' : null);
+    final endParking = widget.onEndParking;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -132,33 +145,17 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
 
                     if (status != null) ...[
                       const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.info_outline_rounded,
-                            size: 17,
-                            color: AppColors.primary,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              status,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.greyText,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                      UserErrorNotice(status),
                     ],
 
                     const SizedBox(height: 24),
 
-                    const Center(
+                    Center(
                       child: Text(
-                        'TIME UNTIL PICKUP',
-                        style: TextStyle(
+                        session == null
+                            ? 'TIME UNTIL REQUESTED PICKUP'
+                            : 'TIME UNTIL PICKUP',
+                        style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: AppColors.primary,
@@ -199,7 +196,7 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                                 const SizedBox(height: 8),
 
                                 _PickupCountdown(
-                                  pickupTime: widget.session.pickupTime,
+                                  pickupTime: pickupTime,
                                   currentTime: widget.currentTime,
                                 ),
 
@@ -225,15 +222,17 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                       child: Text.rich(
                         TextSpan(
                           children: [
-                            const TextSpan(
-                              text: 'Pick up at ',
-                              style: TextStyle(
+                            TextSpan(
+                              text: session == null
+                                  ? 'Requested pickup at '
+                                  : 'Pick up at ',
+                              style: const TextStyle(
                                 fontSize: 17,
                                 color: AppColors.greyText,
                               ),
                             ),
                             TextSpan(
-                              text: pickupTimeText,
+                              text: _formatPickupTime(pickupTime),
                               style: const TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w700,
@@ -244,6 +243,16 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                         ),
                       ),
                     ),
+                    if (session != null && widget.requestedPickupTime != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Center(
+                          child: Text(
+                            'Pending pickup time: ${_formatPickupTime(widget.requestedPickupTime!)}',
+                            style: const TextStyle(color: AppColors.greyText),
+                          ),
+                        ),
+                      ),
 
                     const SizedBox(height: 20),
 
@@ -273,16 +282,19 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                             runSpacing: 4,
                             children: [
                               Text(
-                                widget.session.vehicleType == 'motorcycle'
-                                    ? 'Motorcycle'
-                                    : 'Car',
+                                switch (vehicleType) {
+                                  'motorcycle' => 'Motorcycle',
+                                  'car' => 'Car',
+                                  _ => 'Vehicle',
+                                },
                                 style: TextStyle(
                                   fontSize: 16,
                                   color: AppColors.greyText,
                                 ),
                               ),
                               Text(
-                                widget.session.vehiclePlate ??
+                                session?.vehiclePlate ??
+                                    widget.requestedVehiclePlate ??
                                     'Plate not recorded',
                                 style: TextStyle(
                                   fontSize: 16,
@@ -371,19 +383,21 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                       width: double.infinity,
                       height: 58,
                       child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            ScreenTimeRoute<void>(
-                              screen: 'end_parking',
-                              builder: (context) => EndParkingScreen(
-                                currentIndex: widget.currentIndex,
-                                onNavTap: widget.onNavTap,
-                                onConfirmEndParking: widget.onEndParking,
-                              ),
-                            ),
-                          );
-                        },
+                        onPressed: endParking == null
+                            ? widget.onCancelRequest
+                            : () {
+                                Navigator.push(
+                                  context,
+                                  ScreenTimeRoute<void>(
+                                    screen: 'end_parking',
+                                    builder: (context) => EndParkingScreen(
+                                      currentIndex: widget.currentIndex,
+                                      onNavTap: widget.onNavTap,
+                                      onConfirmEndParking: endParking,
+                                    ),
+                                  ),
+                                );
+                              },
                         style: ElevatedButton.styleFrom(
                           elevation: 0,
                           backgroundColor: AppColors.primary,
@@ -392,9 +406,11 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        child: const Text(
-                          'I picked up my vehicle',
-                          style: TextStyle(
+                        child: Text(
+                          session == null
+                              ? 'Cancel parking request'
+                              : 'I picked up my vehicle',
+                          style: const TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w600,
                           ),

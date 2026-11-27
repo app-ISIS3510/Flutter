@@ -22,6 +22,7 @@ import 'package:parku/services/pickup_analytics_service.dart';
 import 'package:parku/services/profile_service.dart';
 import 'package:parku/services/session_service.dart';
 import 'package:parku/utils/screen_time_observer.dart';
+import 'package:parku/widgets/user_error_notice.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -310,6 +311,16 @@ void main() {
         await tester.pumpAndSettle();
         expect(sessionRequests, requestsBefore);
         expect(find.byType(MyParkingScreen), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(MyParkingScreen),
+            matching: find.widgetWithText(
+              UserErrorNotice,
+              'Your parking request is saved on this device. It will be checked when you reconnect. It is not confirmed yet.',
+            ),
+          ),
+          findsOneWidget,
+        );
         expect((await store.read('session_request'))?['kind'], 'change');
         online = true;
         await service.syncPendingRequest();

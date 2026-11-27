@@ -36,10 +36,7 @@ class ConnectionController extends ChangeNotifier {
 
   String? get notice {
     if (error != null) return error;
-    if (hasNetwork == false) {
-      return 'No network connection. Saved information may be out of date.';
-    }
-    if (checking) {
+    if (checking && hasNetwork == true) {
       return 'Network available. Checking your saved information...';
     }
     return null;

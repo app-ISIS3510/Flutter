@@ -57,12 +57,15 @@ void main() {
       await controller.start();
       await settleEvents();
       expect(refreshes, 0);
+      expect(controller.notice, isNull);
       events.add([ConnectivityResult.wifi]);
       events.add([ConnectivityResult.wifi]);
       events.add([ConnectivityResult.mobile]);
       await settleEvents();
       expect(refreshes, 1);
       events.add([ConnectivityResult.none]);
+      await settleEvents();
+      expect(controller.notice, isNull);
       events.add([ConnectivityResult.ethernet]);
       await settleEvents();
       expect(refreshes, 2);
@@ -261,7 +264,8 @@ void main() {
       ProfileService(users, store: local, checkConnection: () async => null),
     );
     addTearDown(profile.dispose);
-    expect(await profile.addVehicle(VehicleType.car, 'ABC123'), isFalse);
+    expect(await profile.addVehicle(VehicleType.car, 'ABC123'), isTrue);
+    expect(profile.changeQueued, isTrue);
     controller.dispose();
     controller = create(() async {
       await profile.load();

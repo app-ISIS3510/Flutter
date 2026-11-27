@@ -12,6 +12,7 @@ class ChangePickupTimeScreen extends StatefulWidget {
   final String initialTime;
   final String openingTime;
   final String closingTime;
+  final bool showClosingTime;
 
   final ValueChanged<int> onNavTap;
   final Future<void> Function(String) onSave;
@@ -24,6 +25,7 @@ class ChangePickupTimeScreen extends StatefulWidget {
     required this.initialTime,
     required this.openingTime,
     required this.closingTime,
+    this.showClosingTime = true,
     required this.onNavTap,
     required this.onSave,
     this.onDraftChanged,
@@ -211,7 +213,9 @@ class _ChangePickupTimeScreenState extends State<ChangePickupTimeScreen> {
                     const SizedBox(height: 8),
 
                     Text(
-                      'Parking closes at ${_formatTime(widget.closingTime)}',
+                      widget.showClosingTime
+                          ? 'Parking closes at ${_formatTime(widget.closingTime)}'
+                          : 'Parking closing time is unavailable.',
                       style: const TextStyle(
                         fontSize: 13,
                         color: AppColors.greyText,
@@ -221,7 +225,7 @@ class _ChangePickupTimeScreenState extends State<ChangePickupTimeScreen> {
                     const SizedBox(height: 16),
 
                     if (widget.notice != null) ...[
-                      ProfileNotice(widget.notice!),
+                      ProfileError(widget.notice!),
                       const SizedBox(height: 16),
                     ],
 
@@ -347,4 +351,3 @@ class _ChangePickupTimeScreenState extends State<ChangePickupTimeScreen> {
     );
   }
 }
-

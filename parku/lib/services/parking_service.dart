@@ -201,81 +201,154 @@ class ParkingService {
     VehicleType? vehicleType,
   }) async {
     final catalog = await repository.getParkingCatalog();
-
-    return _calculateParkingOptions(catalog, vehicleType: vehicleType);
+    if (!catalog.parkingLots.any(_hasValidCoordinates)) return [];
+    final position = await distanceManager.getCurrentPosition(
+      useDeviceGps: catalog.isFromCache,
+    );
+    return _calculateParkingOptions(
+      catalog,
+      position,
+      vehicleType: vehicleType,
+    );
   }
 
-  Future<NearbyParkingState> getNearbyParking({
+  Stream<NearbyParkingState> watchNearbyParking({
     VehicleType? vehicleType,
-  }) async {
-    final ParkingCatalogSnapshot catalog;
-
+    bool refreshLocation = false,
+  }) async* {
+    final connection = connectivityService.connectionStatus();
+    ParkingCatalogSnapshot? cached;
     try {
-      catalog = await repository.getParkingCatalog();
+      cached = await repository.getCachedParkingCatalog();
     } catch (error, stackTrace) {
       developer.log(
-        'Could not load nearby parking catalog',
+        'Could not read the saved nearby parking catalog',
         name: 'ParkingService',
         error: error,
         stackTrace: stackTrace,
       );
-
-      return const NearbyParkingState(
-        errorMessage:
-            'Could not load nearby parking lots. Connect and try again later.',
-      );
+    }
+    if (cached != null && cached.parkingLots.isNotEmpty) {
+      yield _nearbyState(cached, vehicleType: vehicleType, isLocating: true);
     }
 
-    final options = await _calculateParkingOptions(
-      catalog,
-      vehicleType: vehicleType,
-    );
+    final offline = await connection == false;
+    var catalog = cached;
+    if (!offline) {
+      try {
+        catalog = await repository.getParkingCatalog();
+      } catch (error, stackTrace) {
+        developer.log(
+          'Could not refresh the nearby parking catalog',
+          name: 'ParkingService',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+    }
+    if (catalog == null) {
+      yield NearbyParkingState(
+        errorMessage: offline
+            ? 'No saved parking lots are available. Connect once to load them.'
+            : 'Could not load nearby parking lots. Connect and try again later.',
+      );
+      return;
+    }
 
-    return NearbyParkingState(
-      options: options,
-      updatedAt: catalog.updatedAt,
-      isFromCache: catalog.isFromCache,
-    );
+    if (!catalog.parkingLots.any(_hasValidCoordinates)) {
+      yield _nearbyState(
+        catalog,
+        vehicleType: vehicleType,
+        locationNotice: catalog.parkingLots.isEmpty ? null : 'Showing parking lots without distances. These lots have no saved coordinates.',
+      );
+      return;
+    }
+    if (catalog != cached) {
+      yield _nearbyState(catalog, vehicleType: vehicleType, isLocating: true);
+    }
+
+    try {
+      final result = await distanceManager.getNearbyPosition(
+        useDeviceGps: offline || catalog.isFromCache,
+        refreshLocation: refreshLocation,
+      );
+      yield _nearbyState(
+        catalog,
+        vehicleType: vehicleType,
+        position: result.position,
+        locationNotice: result.isLastKnown
+            ? 'Distances use your last known location.'
+            : null,
+      );
+    } catch (error) {
+      final reason = switch (error.toString()) {
+        'Exception: Location services are disabled.' =>
+          'Device location is turned off.',
+        'Exception: Location permission was denied.' ||
+        'Exception: Location permission was permanently denied.' =>
+          'ParkU needs location permission to show distances.',
+        _ => 'Could not get your location.',
+      };
+      yield _nearbyState(
+        catalog,
+        vehicleType: vehicleType,
+        locationNotice: '$reason Showing parking lots without distances.',
+      );
+    }
   }
 
-  Future<List<ParkingOption>> _calculateParkingOptions(
+  NearbyParkingState _nearbyState(
     ParkingCatalogSnapshot catalog, {
     VehicleType? vehicleType,
-  }) async {
-    final parkingWithLocation = catalog.parkingLots
-        .where(_hasValidCoordinates)
-        .toList();
+    Position? position,
+    bool isLocating = false,
+    String? locationNotice,
+  }) => NearbyParkingState(
+    options: _calculateParkingOptions(
+      catalog,
+      position,
+      vehicleType: vehicleType,
+    ),
+    updatedAt: catalog.updatedAt,
+    isFromCache: catalog.isFromCache,
+    isLocating: isLocating,
+    locationNotice: locationNotice,
+  );
 
-    if (parkingWithLocation.isEmpty) return [];
-
-    final position = await distanceManager.getCurrentPosition(
-      useDeviceGps: catalog.isFromCache,
-    );
-
-    if (!_validCoordinates(position.latitude, position.longitude)) {
+  List<ParkingOption> _calculateParkingOptions(
+    ParkingCatalogSnapshot catalog,
+    Position? position, {
+    VehicleType? vehicleType,
+  }) {
+    if (position != null &&
+        !_validCoordinates(position.latitude, position.longitude)) {
       throw StateError('Location coordinates are invalid.');
     }
 
-    final options = parkingWithLocation
-        .map((parking) {
-          return ParkingOption(
-            parking: parking,
-            distanceMeters: distanceManager.calculateDistance(
-              userLatitude: position.latitude,
-              userLongitude: position.longitude,
-              parkingLatitude: parking.latitude!,
-              parkingLongitude: parking.longitude!,
-            ),
-            vehicleType: vehicleType,
-            isFromCache: catalog.isFromCache,
-            updatedAt: catalog.updatedAt,
-          );
-        })
-        .where((option) => option.distanceMeters.isFinite)
-        .toList();
-
-    options.sort((a, b) => a.distanceMeters.compareTo(b.distanceMeters));
-
+    final lots = position == null
+        ? catalog.parkingLots
+        : catalog.parkingLots.where(_hasValidCoordinates);
+    final options = [
+      for (final parking in lots)
+        ParkingOption(
+          parking: parking,
+          distanceMeters: position == null
+              ? null
+              : distanceManager.calculateDistance(
+                  userLatitude: position.latitude,
+                  userLongitude: position.longitude,
+                  parkingLatitude: parking.latitude!,
+                  parkingLongitude: parking.longitude!,
+                ),
+          vehicleType: vehicleType,
+          isFromCache: catalog.isFromCache,
+          updatedAt: catalog.updatedAt,
+        ),
+    ];
+    if (position != null) {
+      options.removeWhere((option) => !option.distanceMeters!.isFinite);
+      options.sort((a, b) => a.distanceMeters!.compareTo(b.distanceMeters!));
+    }
     return options;
   }
 
