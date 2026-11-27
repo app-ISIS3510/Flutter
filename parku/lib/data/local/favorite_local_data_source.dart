@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
 
+import '../memory/favorite_memory_cache.dart';
 import '../../models/parking.dart';
 import '../../state/favorite_list_state.dart';
 import '../../utils/client_id.dart';
@@ -9,31 +10,49 @@ import 'app_database.dart';
 
 class FavoriteLocalDataSource {
   final AppDatabase _database;
+  final FavoriteMemoryCache _memoryCache = FavoriteMemoryCache();
 
   FavoriteLocalDataSource({AppDatabase? database})
     : _database = database ?? AppDatabase.instance;
+  void clearMemoryCache() {
+    _memoryCache.clear();
+  }
 
   Future<FavoriteListState?> read(String userId) async {
+    final cached = _memoryCache.read(userId);
+
+    if (cached != null) {
+      return cached;
+    }
+
+    final generation = _memoryCache.generation;
     final db = await _database.database;
-    return db.transaction((txn) async {
+
+    final snapshot = await db.transaction((txn) async {
       final metadata = await txn.query(
         'favorite_snapshot_metadata',
         where: 'user_id = ?',
         whereArgs: [userId],
       );
+
       final rows = await txn.query(
         'favorite_cache',
         where: 'user_id = ?',
         whereArgs: [userId],
         orderBy: 'updated_at DESC',
       );
+
       final pending = await txn.query(
         'pending_favorite_actions',
         columns: ['action_id'],
         where: 'user_id = ?',
         whereArgs: [userId],
       );
-      if (metadata.isEmpty && rows.isEmpty && pending.isEmpty) return null;
+
+      if (metadata.isEmpty && rows.isEmpty && pending.isEmpty) {
+        return null;
+      }
+
       return FavoriteListState(
         favorites: rows
             .where(
@@ -53,6 +72,12 @@ class FavoriteLocalDataSource {
         pendingCount: pending.length,
       );
     });
+
+    if (snapshot != null) {
+      _memoryCache.write(userId, snapshot, expectedGeneration: generation);
+    }
+
+    return snapshot;
   }
 
   Future<bool?> status(
@@ -120,6 +145,7 @@ class FavoriteLocalDataSource {
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }, conflictAlgorithm: ConflictAlgorithm.replace);
     });
+    _memoryCache.invalidate(userId);
   }
 
   Future<void> saveSnapshot(
@@ -176,6 +202,7 @@ class FavoriteLocalDataSource {
         'updated_at': now,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
     });
+    _memoryCache.invalidate(userId);
   }
 
   Future<void> setDesired(
@@ -214,6 +241,7 @@ class FavoriteLocalDataSource {
         'created_at_ms': DateTime.now().millisecondsSinceEpoch,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
     });
+    _memoryCache.invalidate(userId);
   }
 
   Future<List<Map<String, Object?>>> due(String userId) async {
@@ -248,6 +276,7 @@ class FavoriteLocalDataSource {
         whereArgs: [actionId, userId],
       );
     });
+    _memoryCache.invalidate(userId);
   }
 
   Future<void> postpone(String actionId, int attempts) async {
