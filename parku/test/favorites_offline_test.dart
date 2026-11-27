@@ -155,4 +155,86 @@ void main() {
     expect(saved!.favorites, hasLength(1));
     expect(saved.pendingCount, 1);
   });
+
+  test('reuses the in-memory snapshot on repeated reads', () async {
+    await local.saveSnapshot('user-1', [
+      parking,
+    ], requestedAt: DateTime.now().toUtc());
+
+    await local.read('user-1');
+
+    final second = await local.read('user-1');
+    final third = await local.read('user-1');
+
+    expect(second, isNotNull);
+    expect(identical(second, third), isTrue);
+  });
+
+  test('invalidates memory cache after removing a favorite', () async {
+    await local.saveSnapshot('user-1', [
+      parking,
+    ], requestedAt: DateTime.now().toUtc());
+
+    final before = await local.read('user-1');
+
+    expect(before!.favorites, hasLength(1));
+
+    await local.setDesired('user-1', parking.id, false, parking);
+
+    final after = await local.read('user-1');
+
+    expect(after!.favorites, isEmpty);
+    expect(after.pendingCount, 1);
+    expect(identical(before, after), isFalse);
+  });
+  test('invalidates memory cache after adding a favorite', () async {
+    await local.saveSnapshot('user-1', [], requestedAt: DateTime.now().toUtc());
+
+    final before = await local.read('user-1');
+
+    expect(before!.favorites, isEmpty);
+
+    await local.setDesired('user-1', parking.id, true, parking);
+
+    final after = await local.read('user-1');
+
+    expect(after!.favorites, hasLength(1));
+    expect(after.pendingCount, 1);
+    expect(identical(before, after), isFalse);
+  });
+  test('invalidates memory cache after synchronization', () async {
+    await local.setDesired('user-1', parking.id, true, parking);
+
+    final before = await local.read('user-1');
+
+    expect(before!.pendingCount, 1);
+
+    final pending = await local.due('user-1');
+
+    await local.acknowledge(pending.single['action_id'] as String, 'user-1');
+
+    final after = await local.read('user-1');
+
+    expect(after!.pendingCount, 0);
+    expect(after.favorites, hasLength(1));
+    expect(identical(before, after), isFalse);
+  });
+
+  test('clears memory cache without deleting persistent favorites', () async {
+    await local.saveSnapshot('user-1', [
+      parking,
+    ], requestedAt: DateTime.now().toUtc());
+
+    await local.read('user-1');
+
+    final cached = await local.read('user-1');
+
+    local.clearMemoryCache();
+
+    final restored = await local.read('user-1');
+
+    expect(restored, isNotNull);
+    expect(restored!.favorites.single.id, parking.id);
+    expect(identical(cached, restored), isFalse);
+  });
 }

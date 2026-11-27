@@ -26,10 +26,16 @@ class FavoriteSyncService extends ChangeNotifier {
     _connectionSubscription = connectivity.onNetworkChanged.listen((connected) {
       if (connected) unawaited(flush());
     }, onError: (Object _) {});
-    _authSubscription = repository.client.auth.onAuthStateChange.listen(
-      (_) => unawaited(flush()),
-      onError: (Object _) {},
-    );
+    _authSubscription = repository.client.auth.onAuthStateChange.listen((
+      state,
+    ) {
+      if (state.event == AuthChangeEvent.signedOut) {
+        repository.localDataSource.clearMemoryCache();
+        return;
+      }
+
+      unawaited(flush());
+    }, onError: (Object _) {});
     _timer = Timer.periodic(
       const Duration(seconds: 30),
       (_) => unawaited(flush()),
@@ -53,15 +59,28 @@ class FavoriteSyncService extends ChangeNotifier {
           return;
         }
       } catch (_) {}
-      if (_disposed) return;
+      if (_disposed || repository.client.auth.currentUser?.id != userId) {
+        return;
+      }
+
       final before =
           (await repository.localDataSource.read(userId))?.pendingCount ?? 0;
-      if (before == 0) return;
+
+      if (_disposed ||
+          repository.client.auth.currentUser?.id != userId ||
+          before == 0) {
+        return;
+      }
+
       await repository.syncPending();
       if (_disposed || repository.client.auth.currentUser?.id != userId) return;
       final after =
           (await repository.localDataSource.read(userId))?.pendingCount ?? 0;
-      if (before != after && !_disposed) notifyListeners();
+      if (before != after &&
+          !_disposed &&
+          repository.client.auth.currentUser?.id == userId) {
+        notifyListeners();
+      }
     } catch (error, stackTrace) {
       developer.log(
         'Could not synchronize saved favorites',
@@ -74,6 +93,7 @@ class FavoriteSyncService extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    repository.localDataSource.clearMemoryCache();
     _timer?.cancel();
     _connectionSubscription?.cancel();
     _authSubscription?.cancel();
