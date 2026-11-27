@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/auth_gate.dart';
 import 'theme/app_theme.dart';
 import 'utils/app_error_handler.dart';
+import 'utils/screen_time_observer.dart';
 import 'widgets/unexpected_error_view.dart';
 import 'widgets/connectivity_banner.dart';
 import 'services/profile_service.dart';
@@ -34,10 +35,17 @@ Future<void> main() async {
   runApp(const ParkUApp());
 }
 
-class ParkUApp extends StatelessWidget {
+class ParkUApp extends StatefulWidget {
   final ProfileService? profileService;
   final SessionService? sessionService;
   const ParkUApp({super.key, this.profileService, this.sessionService});
+
+  @override
+  State<ParkUApp> createState() => _ParkUAppState();
+}
+
+class _ParkUAppState extends State<ParkUApp> {
+  final _screenTime = ScreenTimeObserver();
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +53,7 @@ class ParkUApp extends StatelessWidget {
       scaffoldMessengerKey: AppErrorHandler.messengerKey,
       debugShowCheckedModeBanner: false,
       title: 'ParkU',
+      navigatorObservers: [_screenTime],
       builder: (context, child) =>
           ConnectivityBanner(child: child ?? const SizedBox.shrink()),
       theme: ThemeData(
@@ -53,8 +62,9 @@ class ParkUApp extends StatelessWidget {
         fontFamily: 'Inter',
       ),
       home: AuthGate(
-        profileService: profileService,
-        sessionService: sessionService,
+        profileService: widget.profileService,
+        sessionService: widget.sessionService,
+        screenTime: _screenTime,
       ),
     );
   }

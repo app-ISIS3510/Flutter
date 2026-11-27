@@ -22,41 +22,68 @@ class ProfilePage extends StatelessWidget {
   final VoidCallback? onBack;
   final ValueChanged<int> onNavTap;
   final double gap;
-  final Widget child;
+  final Widget? child;
+  final int itemCount;
+  final IndexedWidgetBuilder? itemBuilder;
+
   const ProfilePage({
     super.key,
     required this.title,
     this.onBack,
     required this.onNavTap,
-    required this.child,
+    required Widget this.child,
     this.gap = 24,
-  });
+  }) : itemCount = 0,
+       itemBuilder = null;
+
+  const ProfilePage.list({
+    super.key,
+    required this.title,
+    this.onBack,
+    required this.onNavTap,
+    required this.itemCount,
+    required IndexedWidgetBuilder this.itemBuilder,
+    this.gap = 24,
+  }) : child = null;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: AppColors.background,
-    body: SafeArea(
-      child: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(24, 18, 24, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ScreenHeader(title: title, onBack: onBack),
-                  SizedBox(height: gap),
-                  child,
-                ],
-              ),
+  Widget build(BuildContext context) {
+    const padding = EdgeInsets.fromLTRB(24, 18, 24, 24);
+    const dismissKeyboard = ScrollViewKeyboardDismissBehavior.onDrag;
+    final header = Padding(
+      padding: EdgeInsets.only(bottom: gap),
+      child: ScreenHeader(title: title, onBack: onBack),
+    );
+    final builder = itemBuilder;
+    final scrollView = builder == null
+        ? SingleChildScrollView(
+            keyboardDismissBehavior: dismissKeyboard,
+            padding: padding,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [header, child!],
             ),
-          ),
-          NavBar(currentIndex: 3, onTap: onNavTap),
-        ],
+          )
+        : ListView.builder(
+            keyboardDismissBehavior: dismissKeyboard,
+            padding: padding,
+            itemCount: itemCount + 1,
+            itemBuilder: (context, index) =>
+                index == 0 ? header : builder(context, index - 1),
+          );
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(child: scrollView),
+            NavBar(currentIndex: 3, onTap: onNavTap),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class ProfileButton extends StatelessWidget {

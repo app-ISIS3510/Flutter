@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/parking.dart';
 import '../models/parking_session.dart';
 import '../theme/app_theme.dart';
+import '../utils/screen_time_observer.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/user_error_notice.dart';
 import 'end_parking.dart';
@@ -387,7 +388,8 @@ class _MyParkingScreenState extends State<MyParkingScreen> {
                             : () {
                                 Navigator.push(
                                   context,
-                                  MaterialPageRoute<void>(
+                                  ScreenTimeRoute<void>(
+                                    screen: 'end_parking',
                                     builder: (context) => EndParkingScreen(
                                       currentIndex: widget.currentIndex,
                                       onNavTap: widget.onNavTap,

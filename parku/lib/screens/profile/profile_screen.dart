@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/profile_controller.dart';
 import '../../controllers/analytics_controller.dart';
 import '../../utils/screen_load_reporter.dart';
+import '../../utils/screen_time_observer.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/design_icon.dart';
 import 'edit_profile_screen.dart';
@@ -14,6 +15,7 @@ class ProfileScreen extends StatefulWidget {
   final ValueChanged<int> onNavTap;
   final VoidCallback onMyParking;
   final VoidCallback onSignedOut;
+  final Future<void> Function()? onSigningOut;
   final VoidCallback onAnalyticsDashboard;
   final VoidCallback? onParkingHistory;
   final AnalyticsController? analytics;
@@ -25,6 +27,7 @@ class ProfileScreen extends StatefulWidget {
     required this.onAnalyticsDashboard,
     required this.onSignedOut,
     this.onParkingHistory,
+    this.onSigningOut,
     this.analytics,
   });
   @override
@@ -62,9 +65,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  void _open(Widget screen) {
+  void _open(String name, Widget screen) {
     widget.controller.clearError();
-    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
+    Navigator.of(context).push(
+      ScreenTimeRoute<void>(screen: name, builder: (_) => screen),
+    );
   }
 
   Widget _menu(
@@ -172,6 +177,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ProfileButton(
                       text: 'Edit profile',
                       onPressed: () => _open(
+                        'edit_profile',
                         EditProfileScreen(
                           controller: controller,
                           onNavTap: widget.onNavTap,
@@ -187,6 +193,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 'My vehicles',
                 'Add your car or motorcycle plate',
                 () => _open(
+                  'vehicles',
                   VehiclesScreen(
                     controller: controller,
                     onNavTap: widget.onNavTap,
@@ -240,6 +247,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onPressed: controller.busy
                     ? null
                     : () async {
+                        await widget.onSigningOut?.call();
+                        if (!mounted) return;
                         if (await controller.signOut() && mounted) {
                           widget.onSignedOut();
                         }

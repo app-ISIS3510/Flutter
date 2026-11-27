@@ -46,4 +46,30 @@ class UserPreferencesService {
 
     return DateTime.tryParse(saved);
   }
+
+  String _parkingBudgetKey(String userId) =>
+      'parku.parking_budget.${Uri.encodeComponent(userId)}';
+
+  Future<void> saveParkingBudget(
+    String userId, {
+    required int minutes,
+    required int budget,
+  }) {
+    return _preferences.setStringList(_parkingBudgetKey(userId), [
+      minutes.toString(),
+      budget.toString(),
+    ]);
+  }
+
+  Future<({int minutes, int budget})?> getParkingBudget(String userId) async {
+    final saved = await _preferences.getStringList(_parkingBudgetKey(userId));
+    if (saved == null || saved.length != 2) return null;
+
+    final minutes = int.tryParse(saved[0], radix: 10);
+    final budget = int.tryParse(saved[1], radix: 10);
+    if (minutes == null || minutes <= 0 || budget == null || budget < 0) {
+      return null;
+    }
+    return (minutes: minutes, budget: budget);
+  }
 }

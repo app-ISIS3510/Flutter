@@ -115,6 +115,39 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('stays farther down are built when the user scrolls', (
+    tester,
+  ) async {
+    final day = DateTime.utc(2026, 11, 24);
+    history.summaries = List.generate(
+      30,
+      (index) => ParkingSummary(
+        sessionId: 'session-$index',
+        userId: 'user-1',
+        parkingId: 'parking-1',
+        parkingName: 'Parking lot $index',
+        vehicleType: 'car',
+        startedAt: day,
+        pickupTime: day.add(const Duration(hours: 1)),
+        endedAt: day.add(const Duration(hours: 1)),
+      ),
+    );
+    await tester.pumpWidget(historyPage());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Parking lot 0'), findsOneWidget);
+    final lastStay = find.text('Parking lot 29');
+    expect(lastStay, findsNothing);
+
+    await tester.scrollUntilVisible(lastStay, 400);
+    await tester.pumpAndSettle();
+
+    expect(lastStay, findsOneWidget);
+    expect(find.text('Parking lot 0'), findsNothing);
+    expect(find.text('Profile'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('saved parking stays accessible when the profile cannot load', (
     tester,
   ) async {

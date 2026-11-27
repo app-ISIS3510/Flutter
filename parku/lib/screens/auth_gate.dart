@@ -9,6 +9,7 @@ import '../services/profile_service.dart';
 import '../services/session_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/error_messages.dart';
+import '../utils/screen_time_observer.dart';
 import '../widgets/user_error_notice.dart';
 import 'check_email.dart';
 import 'create_account.dart';
@@ -30,11 +31,13 @@ enum AuthScreen {
 class AuthGate extends StatefulWidget {
   final ProfileService? profileService;
   final SessionService? sessionService;
+  final ScreenTimeObserver? screenTime;
 
   const AuthGate({
     super.key,
     this.profileService,
     this.sessionService,
+    this.screenTime,
   });
 
   @override
@@ -343,6 +346,7 @@ Future<void> _handleRecoveryLink() async {
             key: ValueKey(session.user.id),
             profileService: widget.profileService,
             sessionService: widget.sessionService,
+            screenTime: widget.screenTime,
           );
         }
 
