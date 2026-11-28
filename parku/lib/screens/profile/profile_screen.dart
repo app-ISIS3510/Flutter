@@ -18,6 +18,7 @@ class ProfileScreen extends StatefulWidget {
   final Future<void> Function()? onSigningOut;
   final VoidCallback onAnalyticsDashboard;
   final VoidCallback? onParkingHistory;
+  final VoidCallback? onLastParkingSummary;
   final AnalyticsController? analytics;
   const ProfileScreen({
     super.key,
@@ -27,6 +28,7 @@ class ProfileScreen extends StatefulWidget {
     required this.onAnalyticsDashboard,
     required this.onSignedOut,
     this.onParkingHistory,
+    this.onLastParkingSummary,
     this.onSigningOut,
     this.analytics,
   });
@@ -67,9 +69,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _open(String name, Widget screen) {
     widget.controller.clearError();
-    Navigator.of(context).push(
-      ScreenTimeRoute<void>(screen: name, builder: (_) => screen),
-    );
+    Navigator.of(context)
+        .push(ScreenTimeRoute<void>(screen: name, builder: (_) => screen));
   }
 
   Widget _menu(
@@ -217,6 +218,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 16),
               ],
+              if (widget.onLastParkingSummary != null) ...[
+                _menu(
+                  'profile_clock',
+                  'Last parking summary',
+                  'View your last completed parking stay',
+                  widget.onLastParkingSummary!,
+                ),
+                const SizedBox(height: 16),
+              ],
               _menu(
                 'profile_heart',
                 'My favorites',
@@ -254,6 +264,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         }
                       },
               ),
+            ],
+            if ((profile == null || controller.loading) &&
+                widget.onLastParkingSummary != null) ...[
+              _menu(
+                'profile_clock',
+                'Last parking summary',
+                'View your saved parking summary',
+                widget.onLastParkingSummary!,
+              ),
+              const SizedBox(height: 16),
             ],
             if ((profile == null || controller.loading) &&
                 widget.onParkingHistory != null)

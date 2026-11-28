@@ -23,7 +23,6 @@ import 'distance_manager.dart';
 import 'smart_parking_processor.dart';
 import '../models/parking_search_result.dart';
 
-
 enum SmartVehicleType { car, motorcycle }
 
 class ParkingService {
@@ -425,14 +424,12 @@ class ParkingService {
 
     cancellationToken?.throwIfCancelled();
 
-    final processed = await processSmartParkingInIsolate(
-      SmartParkingProcessingInput(
-        parkingLots: [for (final parking in parkingLots) parking.toMap()],
-        radiusMeters: radiusMeters,
-        isCar: vehicleType == SmartVehicleType.car,
-        latitude: position?.latitude,
-        longitude: position?.longitude,
-      ),
+    final processed = await processParkingCatalog(
+      parkingLots: parkingLots,
+      radiusMeters: radiusMeters,
+      isCar: vehicleType == SmartVehicleType.car,
+      latitude: position?.latitude,
+      longitude: position?.longitude,
     );
 
     cancellationToken?.throwIfCancelled();
@@ -441,17 +438,7 @@ class ParkingService {
       locationNotice: locationNotice,
       updatedAt: catalog.updatedAt,
       isFromCache: catalog.isFromCache,
-      items: [
-        for (final item in processed)
-          SmartParkingResult(
-            parking: Parking.fromMap(item['parking'] as Map<String, dynamic>),
-            distanceMeters: item['distance'] as double?,
-            availabilityPercentage: item['percentage'] as double,
-            availableSpaces: item['available'] as int,
-            totalSpaces: item['total'] as int,
-            isRecommended: item['recommended'] as bool,
-          ),
-      ],
+      items: processed,
     );
   }
 }

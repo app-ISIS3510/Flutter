@@ -338,13 +338,41 @@ class SessionService {
     _checkUser(owner);
   }
 
+  Future<ParkingSummary> buildParkingSummary(
+    ParkingSession session, {
+    required String parkingName,
+  }) async {
+    final owner = _userId();
+
+    _checkUser(owner);
+
+    Parking? parking;
+
+    try {
+      parking = await getSavedParking(session.parkingId);
+    } catch (_) {
+      // Parking details may not be available locally.
+    }
+
+    _checkUser(owner);
+
+    return ParkingSummary.fromSession(
+      session,
+      parkingName: parking?.name ?? parkingName,
+      parkingAddress: parking?.address,
+      pricePerMinute: parking?.pricePerMinute,
+    );
+  }
+
   Future<void> _saveSummary(ParkingSession session, String name) async {
     historySaveFailed = false;
+
     if (!historyAvailable) return;
+
     try {
-      await historyRepository.saveSummary(
-        ParkingSummary.fromSession(session, parkingName: name),
-      );
+      final summary = await buildParkingSummary(session, parkingName: name);
+
+      await historyRepository.saveSummary(summary);
     } catch (_) {
       historySaveFailed = true;
     }
