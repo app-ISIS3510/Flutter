@@ -30,30 +30,14 @@ List<Parking> generateCatalog(int size) {
   );
 }
 
-Future<List<SmartParkingResult>> processCatalog(
-  List<Parking> parkingLots,
-) async {
-  final processed = await processSmartParkingInIsolate(
-    SmartParkingProcessingInput(
-      parkingLots: [for (final parking in parkingLots) parking.toMap()],
-      radiusMeters: 1000,
-      isCar: true,
-      latitude: 4.600,
-      longitude: -74.1,
-    ),
+Future<List<SmartParkingResult>> processCatalog(List<Parking> parkingLots) {
+  return processParkingCatalog(
+    parkingLots: parkingLots,
+    radiusMeters: 1000,
+    isCar: true,
+    latitude: 4.600,
+    longitude: -74.1,
   );
-
-  return [
-    for (final item in processed)
-      SmartParkingResult(
-        parking: Parking.fromMap(item['parking'] as Map<String, dynamic>),
-        distanceMeters: item['distance'] as double?,
-        availabilityPercentage: item['percentage'] as double,
-        availableSpaces: item['available'] as int,
-        totalSpaces: item['total'] as int,
-        isRecommended: item['recommended'] as bool,
-      ),
-  ];
 }
 
 Future<List<int>> measureOperation(Future<void> Function() operation) async {
@@ -163,6 +147,87 @@ void main() {
         expect(saved!.parkingLots, hasLength(size));
 
         printStatistics('sqlite_catalog_write', size, measurements);
+      });
+    }
+  });
+
+  group('SQLite cached catalog read performance', () {
+    for (final size in catalogSizes) {
+      test('Merges $size cached parking lots', () async {
+        final directory = await Directory.systemTemp.createTemp(
+          'parku-read-performance-',
+        );
+
+        final database = AppDatabase(
+          factory: databaseFactoryFfi,
+          databasePath: '${directory.path}/benchmark.db',
+        );
+
+        addTearDown(() async {
+          await database.close();
+          await directory.delete(recursive: true);
+        });
+
+        final cache = ParkingLocalDataSource(database: database);
+        final catalog = generateCatalog(size);
+
+        final db = await database.database;
+
+        await cache.saveParkingLots(catalog);
+
+        final catalogTimestamp = DateTime.utc(2026, 11, 27);
+        final detailTimestamp = catalogTimestamp.add(
+          const Duration(minutes: 5),
+        );
+
+        await db.transaction((txn) async {
+          await txn.update('parking_cache', {
+            'cached_at': catalogTimestamp.toIso8601String(),
+          });
+
+          await txn.update(
+            'cache_metadata',
+            {'last_updated_at': catalogTimestamp.toIso8601String()},
+            where: 'cache_key = ?',
+            whereArgs: ['parking_list'],
+          );
+
+          final batch = txn.batch();
+
+          for (var index = 0; index < size; index += 2) {
+            batch.insert('parking_detail_cache', {
+              ...catalog[index].toMap(),
+              'name': 'Updated Parking $index',
+              'cached_at': detailTimestamp.toIso8601String(),
+            });
+          }
+
+          await batch.commit(noResult: true);
+        });
+
+        CachedParkingList? result;
+
+        final measurements = await measureOperation(() async {
+          result = await cache.readParkingForNearby();
+        });
+
+        expect(result, isNotNull);
+        expect(result!.parkingLots, hasLength(size));
+        expect(result!.cachedAt, catalogTimestamp);
+
+        final byId = {
+          for (final parking in result!.parkingLots) parking.id: parking,
+        };
+
+        for (var index = 0; index < size; index++) {
+          final expectedName = index.isEven
+              ? 'Updated Parking $index'
+              : 'Parking $index';
+
+          expect(byId['parking-$index']!.name, expectedName);
+        }
+
+        printStatistics('sqlite_cached_catalog_read', size, measurements);
       });
     }
   });
