@@ -373,12 +373,18 @@ class ParkingService {
   Future<SmartParkingResults> getSmartParkingResults({
     required int radiusMeters,
     required SmartVehicleType vehicleType,
+    CancellationToken? cancellationToken,
   }) async {
     if (radiusMeters <= 0) {
       throw ArgumentError('Radius must be greater than zero.');
     }
 
+    cancellationToken?.throwIfCancelled();
+
     final catalog = await repository.getParkingCatalog();
+
+    cancellationToken?.throwIfCancelled();
+
     final parkingLots = catalog.parkingLots;
 
     if (parkingLots.isEmpty) {
@@ -416,6 +422,8 @@ class ParkingService {
           'radius filter. Enable location and tap Refresh location to search nearby.';
     }
 
+    cancellationToken?.throwIfCancelled();
+
     final processed = await processParkingCatalog(
       parkingLots: parkingLots,
       radiusMeters: radiusMeters,
@@ -423,6 +431,8 @@ class ParkingService {
       latitude: position?.latitude,
       longitude: position?.longitude,
     );
+
+    cancellationToken?.throwIfCancelled();
 
     return SmartParkingResults(
       locationNotice: locationNotice,

@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
 
+import '../utils/async_operations.dart';
 import '../controllers/analytics_controller.dart';
 import '../controllers/parking_comparison_controller.dart';
 import '../controllers/parking_controller.dart';
@@ -65,6 +66,7 @@ class _ParkingListScreenState extends State<ParkingListScreen>
   bool _refreshPending = false;
 
   int _smartVersion = 0;
+  CancellationToken? _smartCancellationToken;
   int _selectedRadius = 1000;
   SmartVehicleType _selectedVehicle = SmartVehicleType.car;
   String? _openingParkingId;
@@ -188,6 +190,7 @@ class _ParkingListScreenState extends State<ParkingListScreen>
   @override
   void dispose() {
     _smartVersion++;
+    _smartCancellationToken?.cancel();
     _screenLoad?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _subscription?.cancel();
@@ -196,6 +199,11 @@ class _ParkingListScreenState extends State<ParkingListScreen>
   }
 
   void _loadResults() {
+    _smartCancellationToken?.cancel();
+
+    final cancellationToken = CancellationToken();
+    _smartCancellationToken = cancellationToken;
+
     _smartLoading = true;
     final version = ++_smartVersion;
 
@@ -203,6 +211,7 @@ class _ParkingListScreenState extends State<ParkingListScreen>
       () => widget.controller.loadSmartParkingResults(
         radiusMeters: _selectedRadius,
         vehicleType: _selectedVehicle,
+        cancellationToken: cancellationToken,
       ),
     );
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:parku/utils/async_operations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
@@ -10,6 +11,7 @@ import 'package:parku/repositories/parking_repository.dart';
 import 'package:parku/services/distance_manager.dart';
 import 'package:parku/services/parking_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart';
 
 import 'support/parking_fakes.dart';
 
@@ -22,6 +24,9 @@ void main() {
   var requests = 0;
   var online = true;
 
+  Completer<void>? catalogGate;
+  Completer<void>? catalogStarted;
+
   setUp(() {
     original = GeolocatorPlatform.instance;
     location = FakeLocationPlatform();
@@ -29,13 +34,31 @@ void main() {
     rows = [parkingData()];
     requests = 0;
     online = true;
+    catalogGate = null;
+    catalogStarted = null;
     client = SupabaseClient(
       'https://test.invalid',
       'test-key',
       authOptions: const AuthClientOptions(autoRefreshToken: false),
       httpClient: MockClient((request) async {
         requests++;
-        if (!online) throw http.ClientException('No connection');
+
+        final started = catalogStarted;
+
+        if (started != null && !started.isCompleted) {
+          started.complete();
+        }
+
+        final gate = catalogGate;
+
+        if (gate != null) {
+          await gate.future;
+        }
+
+        if (!online) {
+          throw http.ClientException('No connection');
+        }
+
         return http.Response(
           jsonEncode(rows),
           200,
@@ -238,4 +261,201 @@ void main() {
       expect(results.items.last.isRecommended, isFalse);
     },
   );
+  group('Smart Parking cooperative cancellation', () {
+    test(
+      'cancellation during GPS prevents returning obsolete results',
+      () async {
+        final token = CancellationToken();
+        final positionGate = Completer<Position>();
+
+        location.positionResult = positionGate.future;
+
+        final request = controller.loadSmartParkingResults(
+          radiusMeters: 1000,
+          vehicleType: SmartVehicleType.car,
+          cancellationToken: token,
+        );
+
+        final verification = expectLater(
+          request,
+          throwsA(isA<OperationCancelledException>()),
+        );
+
+        final deadline = DateTime.now().add(const Duration(seconds: 5));
+
+        while (location.positionCalls == 0 &&
+            DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        }
+
+        final gpsStarted = location.positionCalls == 1;
+
+        token.cancel();
+        positionGate.complete(location.positionAt(DateTime.now()));
+
+        await verification;
+
+        expect(gpsStarted, isTrue);
+        expect(location.positionCalls, 1);
+        expect(token.isCancelled, isTrue);
+      },
+    );
+    test('cancelled request does not query the backend', () async {
+      final token = CancellationToken();
+      token.cancel();
+
+      await expectLater(
+        controller.loadSmartParkingResults(
+          radiusMeters: 500,
+          vehicleType: SmartVehicleType.car,
+          cancellationToken: token,
+        ),
+        throwsA(isA<OperationCancelledException>()),
+      );
+
+      expect(requests, 0);
+      expect(location.positionCalls, 0);
+    });
+
+    test('cancellation during catalog loading prevents GPS requests', () async {
+      catalogGate = Completer<void>();
+      catalogStarted = Completer<void>();
+
+      final token = CancellationToken();
+
+      final request = controller.loadSmartParkingResults(
+        radiusMeters: 500,
+        vehicleType: SmartVehicleType.car,
+        cancellationToken: token,
+      );
+
+      final verification = expectLater(
+        request,
+        throwsA(isA<OperationCancelledException>()),
+      );
+
+      await catalogStarted!.future;
+
+      token.cancel();
+      catalogGate!.complete();
+
+      await verification;
+
+      expect(requests, 1);
+      expect(location.positionCalls, 0);
+    });
+
+    test('overlapping requests without cancellation all request GPS', () async {
+      catalogGate = Completer<void>();
+      catalogStarted = Completer<void>();
+
+      final first = controller.loadSmartParkingResults(
+        radiusMeters: 500,
+        vehicleType: SmartVehicleType.car,
+      );
+
+      await catalogStarted!.future;
+
+      final second = controller.loadSmartParkingResults(
+        radiusMeters: 1000,
+        vehicleType: SmartVehicleType.car,
+      );
+
+      final third = controller.loadSmartParkingResults(
+        radiusMeters: 2000,
+        vehicleType: SmartVehicleType.car,
+      );
+
+      catalogGate!.complete();
+
+      final results = await Future.wait([first, second, third]);
+
+      expect(results, hasLength(3));
+      expect(location.positionCalls, 3);
+
+      debugPrint(
+        'CANCELLATION_BENCHMARK | '
+        'strategy=without_cancellation | '
+        'requests=3 | '
+        'gps_calls=${location.positionCalls}',
+      );
+    });
+
+    test('only the latest overlapping request reaches GPS', () async {
+      catalogGate = Completer<void>();
+      catalogStarted = Completer<void>();
+
+      final firstToken = CancellationToken();
+      final secondToken = CancellationToken();
+      final latestToken = CancellationToken();
+
+      final first = controller.loadSmartParkingResults(
+        radiusMeters: 500,
+        vehicleType: SmartVehicleType.car,
+        cancellationToken: firstToken,
+      );
+
+      final firstVerification = expectLater(
+        first,
+        throwsA(isA<OperationCancelledException>()),
+      );
+
+      await catalogStarted!.future;
+
+      firstToken.cancel();
+
+      final second = controller.loadSmartParkingResults(
+        radiusMeters: 1000,
+        vehicleType: SmartVehicleType.car,
+        cancellationToken: secondToken,
+      );
+
+      final secondVerification = expectLater(
+        second,
+        throwsA(isA<OperationCancelledException>()),
+      );
+
+      secondToken.cancel();
+
+      final latest = controller.loadSmartParkingResults(
+        radiusMeters: 2000,
+        vehicleType: SmartVehicleType.car,
+        cancellationToken: latestToken,
+      );
+
+      catalogGate!.complete();
+
+      await firstVerification;
+      await secondVerification;
+
+      final results = await latest;
+
+      expect(results.items, hasLength(1));
+      expect(results.items.single.isRecommended, isTrue);
+      expect(location.positionCalls, 1);
+      expect(latestToken.isCancelled, isFalse);
+
+      debugPrint(
+        'CANCELLATION_BENCHMARK | '
+        'strategy=cooperative_cancellation | '
+        'requests=3 | '
+        'gps_calls=${location.positionCalls}',
+      );
+    });
+
+    test('active token preserves normal Smart Parking results', () async {
+      final token = CancellationToken();
+
+      final results = await controller.loadSmartParkingResults(
+        radiusMeters: 1000,
+        vehicleType: SmartVehicleType.car,
+        cancellationToken: token,
+      );
+
+      expect(results.items, hasLength(1));
+      expect(results.items.single.isRecommended, isTrue);
+      expect(location.positionCalls, 1);
+      expect(token.isCancelled, isFalse);
+    });
+  });
 }

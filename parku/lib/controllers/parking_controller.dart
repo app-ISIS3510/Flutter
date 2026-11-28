@@ -10,6 +10,7 @@ import '../state/parking_list_state.dart';
 import '../state/parking_detail_state.dart';
 import '../state/nearby_parking_state.dart';
 import '../models/parking_search_result.dart';
+import '../utils/async_operations.dart';
 
 class ParkingController {
   final ParkingService service;
@@ -85,10 +86,12 @@ class ParkingController {
   Future<SmartParkingResults> loadSmartParkingResults({
     required int radiusMeters,
     required SmartVehicleType vehicleType,
+    CancellationToken? cancellationToken,
   }) {
     return service.getSmartParkingResults(
       radiusMeters: radiusMeters,
       vehicleType: vehicleType,
+      cancellationToken: cancellationToken,
     );
   }
 }

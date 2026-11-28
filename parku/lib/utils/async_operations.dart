@@ -1,7 +1,5 @@
 import 'dart:async';
 
-/// Shares only in-flight work. Success and failure both release the key,
-/// so a subsequent explicit refresh always starts a new operation.
 class SingleFlight<K extends Object, T> {
   final Map<K, Future<T>> _pending = {};
 
@@ -32,8 +30,6 @@ class SingleFlight<K extends Object, T> {
   }
 }
 
-/// Runs state-dependent operations in order. An error reaches its caller but
-/// does not prevent later operations from running.
 class AsyncSerialExecutor {
   Future<void> _tail = Future.value();
 
@@ -41,5 +37,28 @@ class AsyncSerialExecutor {
     final result = _tail.then<T>((_) => Future<T>.sync(operation));
     _tail = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
     return result;
+  }
+}
+
+class OperationCancelledException implements Exception {
+  const OperationCancelledException();
+
+  @override
+  String toString() => 'Operation cancelled';
+}
+
+class CancellationToken {
+  bool _isCancelled = false;
+
+  bool get isCancelled => _isCancelled;
+
+  void cancel() {
+    _isCancelled = true;
+  }
+
+  void throwIfCancelled() {
+    if (_isCancelled) {
+      throw const OperationCancelledException();
+    }
   }
 }
