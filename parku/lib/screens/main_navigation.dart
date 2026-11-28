@@ -5,6 +5,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/parking_summary.dart';
+import 'parking_summary.dart';
 import '../controllers/analytics_controller.dart';
 import '../controllers/connection_controller.dart';
 import '../controllers/favorite_controller.dart';
@@ -1357,7 +1359,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     }
   }
 
-  Future<void> endParking({
+  Future<ParkingSummary?> endParking({
     required ParkingSession session,
     required String parkingName,
   }) async {
@@ -1365,8 +1367,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
     _requireUser(owner);
 
+    final ParkingSession completedSession;
+
     try {
-      await _parkingRequest(
+      completedSession = await _parkingRequest(
         () => sessionController.endParking(
           sessionId: session.id,
           parkingName: parkingName,
@@ -1374,14 +1378,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       );
     } on QueuedChange {
       connection.retryPending();
-      return;
+      return null;
     } finally {
-      if (_sameUser(owner)) {
+      if (mounted && _sameUser(owner)) {
         setState(() {});
       }
     }
 
-    if (!mounted || !_sameUser(owner)) return;
+    if (!mounted || !_sameUser(owner)) return null;
 
     if (sessionService.historySaveFailed) {
       showUserMessage(
@@ -1395,6 +1399,50 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       screen: 'end_parking',
       parkingId: session.parkingId,
     );
+
+    final summary = await sessionService.buildParkingSummary(
+      completedSession,
+      parkingName: parkingName,
+    );
+
+    if (!mounted || !_sameUser(owner)) return null;
+
+    return summary;
+  }
+
+  Future<void> openLastParkingSummary() async {
+    final owner = _userId;
+
+    if (!mounted || !_sameUser(owner)) return;
+
+    try {
+      final summaries = await sessionService.getSavedSessions();
+
+      if (!mounted || !_sameUser(owner)) return;
+
+      if (summaries.isEmpty) {
+        showUserMessage(context, 'No saved parking summary available.');
+        return;
+      }
+
+      final summary = summaries.first;
+
+      await Navigator.of(context).push(
+        ScreenTimeRoute<void>(
+          screen: 'parking_summary',
+          builder: (summaryContext) => ParkingSummaryScreen(
+            summary: summary,
+            isSavedCopy: true,
+            onDone: () => Navigator.of(summaryContext).pop(),
+            onNavTap: _profileNavTap,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted || !_sameUser(owner)) return;
+
+      showUserMessage(context, 'Could not load your saved parking summary.');
+    }
   }
 
   Future<void> openMyParking() async {
@@ -1602,6 +1650,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             onMyParking: openMyParking,
             onParkingHistory: sessionService.historyAvailable
                 ? openParkingHistory
+                : null,
+            onLastParkingSummary: sessionService.historyAvailable
+                ? openLastParkingSummary
                 : null,
             onAnalyticsDashboard: openAnalyticsDashboard,
             onSigningOut: widget.screenTime?.saveTime,

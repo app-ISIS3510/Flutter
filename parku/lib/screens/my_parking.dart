@@ -13,11 +13,12 @@ import '../controllers/navigation_controller.dart';
 import '../controllers/analytics_controller.dart';
 import '../models/navigation_provider.dart';
 import '../widgets/external_navigation.dart';
+import '../models/parking_summary.dart';
 
 class MyParkingScreen extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onNavTap;
-  final Future<void> Function()? onEndParking;
+  final Future<ParkingSummary?> Function()? onEndParking;
   final VoidCallback? onChangePickupTime;
   final VoidCallback? onCancelRequest;
   final NavigationController navigationController;

@@ -14,7 +14,7 @@ Widget parkingScreen({
     home: MyParkingScreen(
       currentIndex: 0,
       onNavTap: (_) {},
-      onEndParking: () async {},
+      onEndParking: () async => null,
       currentTime: currentTime,
       navigationController: NavigationController(NavigationService.create()),
       session: ParkingSession(
