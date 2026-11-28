@@ -4,9 +4,11 @@ import '../theme/app_theme.dart';
 import '../utils/user_error_message.dart';
 import '../widgets/navigation_bar.dart';
 import '../widgets/user_error_notice.dart';
+import '../models/parking_summary.dart';
+import 'parking_summary.dart';
 
 class EndParkingScreen extends StatefulWidget {
-  final Future<void> Function() onConfirmEndParking;
+  final Future<ParkingSummary?> Function() onConfirmEndParking;
   final int currentIndex;
   final ValueChanged<int> onNavTap;
 
@@ -32,11 +34,31 @@ class _EndParkingScreenState extends State<EndParkingScreen> {
     });
 
     try {
-      await widget.onConfirmEndParking();
+      final summary = await widget.onConfirmEndParking();
 
       if (!mounted) return;
 
-      Navigator.pop(context);
+      if (summary == null) {
+        Navigator.pop(context);
+        return;
+      }
+
+      final onNavTap = widget.onNavTap;
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (summaryContext) => ParkingSummaryScreen(
+            summary: summary,
+            onDone: () {
+              Navigator.of(summaryContext).pop();
+            },
+            onNavTap: (index) {
+              Navigator.of(summaryContext).pop();
+              onNavTap(index);
+            },
+          ),
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
 
