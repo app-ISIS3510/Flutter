@@ -23,6 +23,7 @@ import 'distance_manager.dart';
 import 'smart_parking_processor.dart';
 import '../models/parking_search_result.dart';
 
+
 enum SmartVehicleType { car, motorcycle }
 
 class ParkingService {
@@ -373,12 +374,18 @@ class ParkingService {
   Future<SmartParkingResults> getSmartParkingResults({
     required int radiusMeters,
     required SmartVehicleType vehicleType,
+    CancellationToken? cancellationToken,
   }) async {
     if (radiusMeters <= 0) {
       throw ArgumentError('Radius must be greater than zero.');
     }
 
+    cancellationToken?.throwIfCancelled();
+
     final catalog = await repository.getParkingCatalog();
+
+    cancellationToken?.throwIfCancelled();
+
     final parkingLots = catalog.parkingLots;
 
     if (parkingLots.isEmpty) {
@@ -416,6 +423,8 @@ class ParkingService {
           'radius filter. Enable location and tap Refresh location to search nearby.';
     }
 
+    cancellationToken?.throwIfCancelled();
+
     final processed = await processSmartParkingInIsolate(
       SmartParkingProcessingInput(
         parkingLots: [for (final parking in parkingLots) parking.toMap()],
@@ -425,6 +434,8 @@ class ParkingService {
         longitude: position?.longitude,
       ),
     );
+
+    cancellationToken?.throwIfCancelled();
 
     return SmartParkingResults(
       locationNotice: locationNotice,
