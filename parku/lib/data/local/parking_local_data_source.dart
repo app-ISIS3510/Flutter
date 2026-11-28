@@ -86,8 +86,12 @@ class ParkingLocalDataSource {
   }
 
   Future<CachedParkingList?> readParkingForNearby() async {
-    if (_browser != null) return _browser.readParkingForNearby();
+    if (_browser != null) {
+      return _browser.readParkingForNearby();
+    }
+
     final db = await _database.database;
+
     return db.transaction((txn) async {
       final metadata = await txn.query(
         'cache_metadata',
@@ -95,43 +99,64 @@ class ParkingLocalDataSource {
         whereArgs: ['parking_list'],
         limit: 1,
       );
+
       final listUpdatedAt = metadata.isEmpty
           ? null
           : DateTime.parse(metadata.first['last_updated_at'] as String);
+
       final listRows = await txn.query('parking_cache');
       final detailRows = await txn.query('parking_detail_cache');
-      final rowsById = <String, Map<String, Object?>>{
-        for (final row in listRows) row['id'] as String: row,
-      };
+
+      final rowsById = <String, Map<String, Object?>>{};
+      final timestampsById = <String, DateTime>{};
+
+      // Parse each catalog timestamp only once.
+      for (final row in listRows) {
+        final id = row['id'] as String;
+
+        rowsById[id] = row;
+        timestampsById[id] = DateTime.parse(row['cached_at'] as String);
+      }
 
       for (final row in detailRows) {
         final id = row['id'] as String;
+
         final detailUpdatedAt = DateTime.parse(row['cached_at'] as String);
-        final existing = rowsById[id];
-        // Do not restore a detail removed by a newer complete list snapshot.
-        if (existing == null &&
+
+        final existingUpdatedAt = timestampsById[id];
+
+        // Do not restore a detail removed by a newer
+        // complete list snapshot.
+        if (existingUpdatedAt == null &&
             listUpdatedAt != null &&
             !detailUpdatedAt.isAfter(listUpdatedAt)) {
           continue;
         }
-        if (existing == null ||
-            detailUpdatedAt.isAfter(
-              DateTime.parse(existing['cached_at'] as String),
-            )) {
+
+        if (existingUpdatedAt == null ||
+            detailUpdatedAt.isAfter(existingUpdatedAt)) {
           rowsById[id] = row;
+          timestampsById[id] = detailUpdatedAt;
         }
       }
 
-      if (rowsById.isEmpty && listUpdatedAt == null) return null;
-      final rows = rowsById.values.toList();
-      final oldestUpdate = rows.fold<DateTime?>(null, (oldest, row) {
-        final updatedAt = DateTime.parse(row['cached_at'] as String);
-        return oldest == null || updatedAt.isBefore(oldest)
-            ? updatedAt
-            : oldest;
-      });
+      if (rowsById.isEmpty && listUpdatedAt == null) {
+        return null;
+      }
+
+      // Reuse parsed timestamps instead of parsing rows again.
+      DateTime? oldestUpdate;
+
+      for (final updatedAt in timestampsById.values) {
+        if (oldestUpdate == null || updatedAt.isBefore(oldestUpdate)) {
+          oldestUpdate = updatedAt;
+        }
+      }
+
       return CachedParkingList(
-        parkingLots: rows.map((row) => Parking.fromMap(row)).toList(),
+        parkingLots: rowsById.values
+            .map((row) => Parking.fromMap(row))
+            .toList(),
         cachedAt: oldestUpdate ?? listUpdatedAt!,
       );
     });

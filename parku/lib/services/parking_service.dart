@@ -416,31 +416,19 @@ class ParkingService {
           'radius filter. Enable location and tap Refresh location to search nearby.';
     }
 
-    final processed = await processSmartParkingInIsolate(
-      SmartParkingProcessingInput(
-        parkingLots: [for (final parking in parkingLots) parking.toMap()],
-        radiusMeters: radiusMeters,
-        isCar: vehicleType == SmartVehicleType.car,
-        latitude: position?.latitude,
-        longitude: position?.longitude,
-      ),
+    final processed = await processParkingCatalog(
+      parkingLots: parkingLots,
+      radiusMeters: radiusMeters,
+      isCar: vehicleType == SmartVehicleType.car,
+      latitude: position?.latitude,
+      longitude: position?.longitude,
     );
 
     return SmartParkingResults(
       locationNotice: locationNotice,
       updatedAt: catalog.updatedAt,
       isFromCache: catalog.isFromCache,
-      items: [
-        for (final item in processed)
-          SmartParkingResult(
-            parking: Parking.fromMap(item['parking'] as Map<String, dynamic>),
-            distanceMeters: item['distance'] as double?,
-            availabilityPercentage: item['percentage'] as double,
-            availableSpaces: item['available'] as int,
-            totalSpaces: item['total'] as int,
-            isRecommended: item['recommended'] as bool,
-          ),
-      ],
+      items: processed,
     );
   }
 }
